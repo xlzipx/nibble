@@ -1,0 +1,1093 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Some CDNs (X/Twitter) reject images/media requested with a foreign Referer -->
+    <meta name="referrer" content="no-referrer" />
+    <title>Nibble</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Icon sprite (Lucide-style, stroke = currentColor). Use: <svg class="ic"><use href="#i-name"/></svg> -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></symbol>
+        <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+        <symbol id="i-circle-down" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 7v9"/><path d="m8 12 4 4 4-4"/></symbol>
+        <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+        <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+        <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7l10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></symbol>
+        <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></symbol>
+        <symbol id="i-scissors" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88"/><path d="M14.47 14.48 20 20"/><path d="M8.12 8.12 12 12"/></symbol>
+        <symbol id="i-discord" viewBox="0 0 24 24"><path stroke-width="1.6" d="M18.8943 4.34399C17.5183 3.71467 16.057 3.256 14.5317 3C14.3396 3.33067 14.1263 3.77866 13.977 4.13067C12.3546 3.89599 10.7439 3.89599 9.14391 4.13067C8.99457 3.77866 8.77056 3.33067 8.58922 3C7.05325 3.256 5.59191 3.71467 4.22552 4.34399C1.46286 8.41865 0.716188 12.3973 1.08952 16.3226C2.92418 17.6559 4.69486 18.4666 6.4346 19C6.86126 18.424 7.24527 17.8053 7.57594 17.1546C6.9466 16.92 6.34927 16.632 5.77327 16.2906C5.9226 16.184 6.07194 16.0667 6.21061 15.9493C9.68793 17.5387 13.4543 17.5387 16.889 15.9493C17.0383 16.0667 17.177 16.184 17.3263 16.2906C16.7503 16.632 16.153 16.92 15.5236 17.1546C15.8543 17.8053 16.2383 18.424 16.665 19C18.4036 18.4666 20.185 17.6559 22.01 16.3226C22.4687 11.7787 21.2836 7.83202 18.8943 4.34399ZM8.05593 13.9013C7.01058 13.9013 6.15725 12.952 6.15725 11.7893C6.15725 10.6267 6.98925 9.67731 8.05593 9.67731C9.11191 9.67731 9.97588 10.6267 9.95454 11.7893C9.95454 12.952 9.11191 13.9013 8.05593 13.9013ZM15.065 13.9013C14.0196 13.9013 13.1652 12.952 13.1652 11.7893C13.1652 10.6267 13.9983 9.67731 15.065 9.67731C16.121 9.67731 16.985 10.6267 16.9636 11.7893C16.9636 12.952 16.1317 13.9013 15.065 13.9013Z"/></symbol>
+        <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol>
+        <symbol id="i-folder" viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2z"/></symbol>
+        <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/></symbol>
+        <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+        <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+        <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98"/><path d="m15.41 6.51-6.82 3.98"/></symbol>
+        <symbol id="i-clipboard" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+        <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+        <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+        <symbol id="i-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></symbol>
+        <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></symbol>
+        <symbol id="i-minimize" viewBox="0 0 24 24"><path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="m14 10 7-7"/><path d="m3 21 7-7"/></symbol>
+        <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 7.5h4M3 12h18M3 16.5h4M17 7.5h4M17 16.5h4"/></symbol>
+        <symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></symbol>
+        <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+        <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+        <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+        <symbol id="i-hard-drive" viewBox="0 0 24 24"><path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><path d="M6 16h.01M10 16h.01"/></symbol>
+        <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+        <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1.5"/></symbol>
+        <symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+        <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+      </defs>
+    </svg>
+
+    <!-- Custom titlebar (borderless window) -->
+    <header class="titlebar" data-tauri-drag-region>
+      <div class="window-controls">
+        <button class="wc wc-close" id="btn-close" aria-label="close"></button>
+        <button class="wc wc-min"   id="btn-min"   aria-label="minimize"></button>
+        <button class="wc wc-max"   id="btn-max"   aria-label="maximize"></button>
+      </div>
+      <button class="tb-brand" id="btn-open-about" title="About Nibble" aria-label="About Nibble">
+        <img src="assets/logo.png" alt="Nibble" draggable="false" />
+      </button>
+      <div class="tb-spacer" data-tauri-drag-region></div>
+      <button class="tb-btn" id="btn-open-shortcuts" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">
+        <svg class="ic"><use href="#i-zap"/></svg><span>Shortcuts</span>
+      </button>
+      <span class="tb-sep" aria-hidden="true"></span>
+      <button class="tb-btn" id="btn-open-settings" title="Settings (Ctrl+,)" aria-label="Settings">
+        <svg class="ic"><use href="#i-settings"/></svg><span>Settings</span>
+      </button>
+    </header>
+
+    <main class="frame">
+      <!-- Soft red light streaks in the corners (pure decoration) -->
+      <div class="bg-decor" aria-hidden="true">
+        <span class="glow glow-tl"></span>
+        <span class="dots"></span><span class="vignette"></span><span class="horizon"></span><span class="grain"></span>
+        <span class="streak tl1"></span><span class="streak tl2"></span>
+        <!-- the same bands, rising along the whole bottom edge (with gaps) -->
+        <span class="rise r1"></span><span class="rise r2"></span><span class="rise r3"></span><span class="rise r4"></span><span class="rise r5"></span><span class="rise r6"></span><span class="rise r7"></span><span class="rise r8"></span><span class="rise r9"></span><span class="rise r10"></span><span class="rise r11"></span><span class="rise r12"></span><span class="rise r13"></span><span class="rise r14"></span>
+      </div>
+
+      <!-- About popover -->
+      <div class="popover about-popover hidden" id="about-popover" role="dialog" aria-label="About Nibble">
+        <div class="sp-head">
+          <span class="sp-title">About</span>
+          <button class="sp-close" id="btn-close-about" aria-label="close"><svg class="ic"><use href="#i-x"/></svg></button>
+        </div>
+        <div class="about-body">
+          <div class="about-hero">
+            <img class="about-mark" src="assets/mark.png" alt="" draggable="false" />
+            <div class="about-headline">
+              <div class="about-name">Nibble <span class="about-ver app-version">v1.0.0</span></div>
+              <div class="about-tagline">Capture, trim and share — only what you need.</div>
+            </div>
+          </div>
+
+          <p class="about-blurb">
+            Everything for quick clips on Windows: screenshots and screen
+            recordings with drawing tools, video downloads from YouTube, X and
+            1000+ sites, trimming with a live preview and compression that fits
+            Discord. Converts on your GPU (AV1 / HEVC / H.264) and maps HDR to SDR.
+          </p>
+
+          <div class="about-section">
+            <div class="about-section-title">Built with</div>
+            <ul class="about-stack">
+              <li><span class="accent">Tauri 2</span> · Rust + WebView2</li>
+              <li><span class="accent">ffmpeg</span> · NVENC / AMF / QSV / x264 / x265</li>
+              <li><span class="accent">yt-dlp</span> · URL downloads</li>
+            </ul>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-title">Hardware acceleration</div>
+            <div class="about-hw" id="about-hw">(detecting…)</div>
+          </div>
+
+          <div class="about-footer">Nibble by <button class="author-link accent" title="github.com/xlzipx">ZIPEEK</button><span class="hidden" id="about-portable"> · Portable edition</span></div>
+        </div>
+      </div>
+
+      <!-- Keyboard shortcuts popover -->
+      <div class="popover shortcuts-popover hidden" id="shortcuts-popover" role="dialog" aria-label="Keyboard shortcuts">
+        <div class="sp-head">
+          <span class="sp-title">Keyboard shortcuts</span>
+          <button class="sp-close" id="btn-close-shortcuts" aria-label="close"><svg class="ic"><use href="#i-x"/></svg></button>
+        </div>
+        <div class="sp-cols">
+          <dl class="sp-list">
+            <div class="sp-group">Anywhere <span>· change in Settings</span></div>
+            <!-- Filled from Settings by pushCaptureConfig() -->
+            <div class="sp-row"><dt id="sp-key-shot"><kbd>Ctrl+Shift+A</kbd></dt><dd>Screen capture</dd></div>
+            <div class="sp-row"><dt id="sp-key-rec"><kbd>Ctrl+Shift+R</kbd></dt><dd>Record video / GIF · press again to stop</dd></div>
+
+            <div class="sp-group">In Nibble</div>
+            <div class="sp-row"><dt><kbd>Ctrl+O</kbd></dt><dd>Open a video file</dd></div>
+            <div class="sp-row"><dt><kbd>Ctrl+D</kbd></dt><dd>Video from a link</dd></div>
+            <div class="sp-row"><dt><span class="muted">paste a URL</span></dt><dd>Opens Video from a link</dd></div>
+            <div class="sp-row"><dt><kbd>Enter</kbd></dt><dd>Home: choose a preset · Presets: start</dd></div>
+            <div class="sp-row"><dt><kbd>/</kbd></dt><dd>Search presets</dd></div>
+            <div class="sp-row"><dt><kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd></dt><dd>Move through the presets</dd></div>
+            <div class="sp-row"><dt><kbd>Space</kbd></dt><dd>Play / pause in the trim editor</dd></div>
+            <div class="sp-row"><dt><kbd>Esc</kbd></dt><dd>Back one level · cancel a conversion</dd></div>
+            <div class="sp-row"><dt><kbd>Ctrl+,</kbd></dt><dd>Settings</dd></div>
+            <div class="sp-row"><dt><kbd>Ctrl +</kbd> <kbd>Ctrl −</kbd></dt><dd>Interface size · <kbd>Ctrl 0</kbd> resets</dd></div>
+            <div class="sp-row"><dt><kbd>?</kbd></dt><dd>This list</dd></div>
+          </dl>
+          <dl class="sp-list">
+            <div class="sp-group">Capture screen</div>
+            <div class="sp-row"><dt><kbd>1</kbd> … <kbd>9</kbd></dt><dd>Select area · rectangle · ellipse · pen · line · arrow · text · blur · pixelate</dd></div>
+            <div class="sp-row"><dt><kbd>Ctrl+Z</kbd></dt><dd>Undo</dd></div>
+            <div class="sp-row"><dt><kbd>Delete</kbd></dt><dd>Remove the selected drawing</dd></div>
+            <div class="sp-row"><dt><kbd>Shift</kbd></dt><dd>Square / circle · arrows and lines in 45° steps</dd></div>
+            <div class="sp-row"><dt><kbd>Ctrl</kbd></dt><dd>Hold to pick the whole window</dd></div>
+            <div class="sp-row"><dt><kbd>Alt</kbd></dt><dd>Hold to select without snapping</dd></div>
+            <div class="sp-row"><dt><kbd>Enter</kbd></dt><dd>Capture the whole screen</dd></div>
+            <div class="sp-row"><dt><kbd>Esc</kbd></dt><dd>Deselect · cancel</dd></div>
+          </dl>
+        </div>
+      </div>
+
+      <!-- =============== Welcome =============== -->
+      <section id="view-welcome" class="view view-welcome active">
+        <!-- Dependency warning: shown only when ffmpeg is missing -->
+        <div id="dep-banner" class="dep-banner hidden">
+          <svg class="ic dep-banner-icon"><use href="#i-alert"/></svg>
+          <div class="dep-banner-body">
+            <strong>ffmpeg not found.</strong>
+            <span id="dep-banner-msg">Nibble needs ffmpeg to convert anything. Click below to download it automatically — no manual setup.</span>
+            <div class="dep-banner-actions">
+              <button class="btn btn-primary btn-sm" id="dep-install-btn"><svg class="ic"><use href="#i-download"/></svg>Install automatically</button>
+              <span class="dep-install-status muted" id="dep-install-status"></span>
+            </div>
+          </div>
+          <button class="icon-btn dep-banner-close" id="dep-banner-close" aria-label="dismiss"><svg class="ic"><use href="#i-x"/></svg></button>
+        </div>
+
+        <div class="welcome-left">
+          <img class="hero-logo" src="assets/logo.png" alt="Nibble" draggable="false" />
+          <p class="hero-tagline">Capture, trim and share only what<br />you need. Fast and easy.</p>
+
+          <div class="welcome-feats">
+            <div class="feat-head">
+              <svg class="ic ra-icon"><use href="#i-layers"/></svg>
+              <h3 class="col-title">Features</h3>
+            </div>
+            <ul class="features">
+              <li><svg class="ic"><use href="#i-scan"/></svg><span class="f-name">Screen capture</span><span class="f-desc">Image · video · GIF · drawing</span></li>
+              <li><svg class="ic"><use href="#i-download"/></svg><span class="f-name">Download</span><span class="f-desc">YouTube · X · Reddit · 1000+</span></li>
+              <li><svg class="ic"><use href="#i-discord"/></svg><span class="f-name">Fit for Discord</span><span class="f-desc">20 / 50 / 500 MB auto-fit</span></li>
+              <li><svg class="ic"><use href="#i-scissors"/></svg><span class="f-name">Trim</span><span class="f-desc">Live preview + scrubber</span></li>
+              <li><svg class="ic"><use href="#i-refresh"/></svg><span class="f-name">Convert</span><span class="f-desc">AV1 · HEVC · H.264 on GPU</span></li>
+              <li><svg class="ic"><use href="#i-sun"/></svg><span class="f-name">HDR → SDR</span><span class="f-desc">Tonemapped for any screen</span></li>
+              <li><svg class="ic"><use href="#i-folder"/></svg><span class="f-name">Watch folder</span><span class="f-desc">Auto-convert new clips</span></li>
+            </ul>
+          </div>
+
+          <div class="or-divider"><span>System</span></div>
+
+          <div class="welcome-hw" id="welcome-hw">
+            <svg class="ic"><use href="#i-cpu"/></svg>
+            <span id="welcome-hw-text">Detecting hardware…</span>
+          </div>
+          <!-- The signed-in Windows user's name (filled in from hardware detection) -->
+          <div class="welcome-sig" id="welcome-user" title="Signed-in Windows user"></div>
+        </div>
+
+        <div class="welcome-divider" aria-hidden="true"></div>
+
+        <div class="welcome-right">
+          <div class="start-grid">
+            <button class="start-tile" id="btn-go-shot" type="button">
+              <img class="st-ic" src="assets/screen_capture.png" alt="" draggable="false" />
+              <span class="st-title">Screen capture</span>
+              <span class="st-sub" id="shot-sub">Image · video</span>
+            </button>
+            <button class="start-tile" id="btn-go-link" type="button">
+              <img class="st-ic" src="assets/video_from_a_link.png" alt="" draggable="false" />
+              <span class="st-title">Video from a link</span>
+              <span class="st-sub">Share or download</span>
+            </button>
+            <!-- Drop target too: dropping files anywhere stages them and opens the picker -->
+            <button class="start-tile" id="welcome-drop" type="button" title="Choose a preset, then drop or pick files (Ctrl+O opens the file dialog directly)">
+              <img class="st-ic" src="assets/drop_a_video.png" alt="" draggable="false" />
+              <span class="st-title">Drop a video</span>
+              <span class="st-sub">Convert · trim</span>
+            </button>
+          </div>
+
+          <div class="start-divider" aria-hidden="true"></div>
+
+          <!-- Fills the rest of the column: more entries scroll inside -->
+          <div class="activity">
+            <div class="feat-head ra-head">
+              <svg class="ic ra-icon"><use href="#i-clock"/></svg>
+              <h3 class="col-title">Recent Activity</h3>
+              <span class="ra-count" id="ra-count"></span>
+              <button class="icon-btn" id="btn-clear-history" title="Clear Recent Activity" aria-label="Clear Recent Activity"><svg class="ic"><use href="#i-x"/></svg></button>
+            </div>
+            <div id="history-list" class="history-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =============== Picker / drop zone =============== -->
+      <section id="view-picker" class="view view-picker">
+        <div class="picker-top">
+          <button class="btn-back" id="btn-back-welcome"><svg class="ic"><use href="#i-chevron-left"/></svg>Back</button>
+          <h2 class="picker-title">Convert files</h2>
+          <label class="search-box" title="Search presets (/)">
+            <svg class="ic"><use href="#i-search"/></svg>
+            <input type="text" id="preset-search" placeholder="Search presets…" spellcheck="false" autocomplete="off" />
+            <kbd>/</kbd>
+          </label>
+        </div>
+
+        <div class="picker-body">
+          <div class="picker-left">
+            <div class="step-label"><span class="step-num">1</span>Pick what to do</div>
+            <nav class="cat-tabs" id="cat-tabs" aria-label="Preset categories"></nav>
+            <div class="preset-grid" id="preset-list" role="listbox" aria-label="Presets"></div>
+          </div>
+
+          <div class="picker-right">
+            <div class="info-panel" id="info-panel">
+              <div class="info-head">
+                <span class="info-icon" id="info-icon"><svg class="ic"><use href="#i-refresh"/></svg></span>
+                <div class="info-titles">
+                  <div class="info-cat" id="info-cat">—</div>
+                  <div class="info-name" id="info-name">—</div>
+                </div>
+              </div>
+              <div class="info-tags" id="info-tags"></div>
+              <div class="info-text" id="info-text">Select a preset on the left.</div>
+              <div class="info-specs" id="info-specs"></div>
+            </div>
+
+            <div class="step-label"><span class="step-num">2</span>Add your files</div>
+            <div class="drop-zone" id="drop-zone">
+              <div class="drop-empty">
+                <svg class="ic drop-icon"><use href="#i-circle-down"/></svg>
+                <div class="drop-title">Drop videos here</div>
+                <div class="drop-sub muted">MP4 · MKV · MOV · WEBM · M4V</div>
+              </div>
+              <button class="btn" id="btn-pick-files"><svg class="ic"><use href="#i-plus"/></svg><span id="btn-pick-label">Pick files…</span></button>
+              <div class="file-staging" id="file-staging"></div>
+              <div class="params-area hidden" id="params-area"></div>
+              <div class="trim-editor hidden" id="trim-editor">
+                <div class="trim-video-wrap loading" id="trim-video-wrap">
+                  <video id="trim-video" preload="auto" muted playsinline></video>
+                  <div class="trim-play-overlay" id="trim-play-overlay"></div>
+                  <div class="trim-loader" id="trim-loader">
+                    <img class="trim-loader-mark" src="assets/mark.png" alt="" draggable="false" />
+                    <div class="trim-loader-text">generating preview</div>
+                  </div>
+                  <div class="trim-video-error">video preview not available — using thumbnail strip only</div>
+                </div>
+                <div class="trim-strip-wrap">
+                  <div class="trim-strip" id="trim-strip">
+                    <div class="trim-strip-loading">generating preview…</div>
+                  </div>
+                  <div class="trim-overlay-dim trim-overlay-left" id="trim-dim-left"></div>
+                  <div class="trim-overlay-dim trim-overlay-right" id="trim-dim-right"></div>
+                </div>
+                <div class="trim-slider" id="trim-slider">
+                  <div class="trim-track"></div>
+                  <div class="trim-range" id="trim-range"></div>
+                  <div class="trim-playhead" id="trim-playhead"></div>
+                  <div class="trim-handle trim-handle-start" id="trim-handle-start" data-handle="start" tabindex="0"></div>
+                  <div class="trim-handle trim-handle-end"   id="trim-handle-end"   data-handle="end"   tabindex="0"></div>
+                </div>
+                <div class="trim-times">
+                  <label>Start <input type="text" id="trim-input-start" /></label>
+                  <label>End <input type="text" id="trim-input-end" /></label>
+                  <span class="muted trim-duration" id="trim-duration">—</span>
+                </div>
+              </div>
+              <button class="btn btn-primary hidden" id="btn-start">Start conversion →</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =============== Download from URL =============== -->
+      <section id="view-download" class="view view-download">
+        <div class="picker-top">
+          <button class="btn-back" id="btn-back-from-download"><svg class="ic"><use href="#i-chevron-left"/></svg>Back</button>
+          <h2 class="picker-title" id="download-title">Video from a link</h2>
+          <div class="seg link-mode" id="link-mode" role="tablist" aria-label="What to do with the video">
+            <button data-mode="share" role="tab"><svg class="ic"><use href="#i-clipboard"/></svg>Quick share</button>
+            <button data-mode="download" role="tab"><svg class="ic"><use href="#i-download"/></svg>Download</button>
+          </div>
+        </div>
+
+        <div class="download-body">
+          <div class="download-form card">
+            <div class="dl-main">
+              <label class="dl-label">
+                <span>Video URL</span>
+                <input type="text" id="download-url" placeholder="https://youtube.com/watch?v=…  ·  x.com/…  ·  reddit.com/…" />
+              </label>
+
+              <div class="dl-preview hidden" id="dl-preview">
+                <img id="dl-thumb" alt="thumbnail" draggable="false" />
+                <div class="dl-preview-meta">
+                  <div class="dl-preview-title" id="dl-prev-title">—</div>
+                  <div class="dl-preview-info muted" id="dl-prev-info"></div>
+                </div>
+              </div>
+
+              <!-- Trim a section out of the URL before downloading. Defaults to the
+                   full clip; moving a handle switches the download to that range. -->
+              <div class="dl-trim hidden" id="dl-trim">
+                <div class="dl-trim-head">
+                  <span class="dl-label-text">Trim a section</span>
+                  <span class="muted dl-trim-hint">Drag the handles to pick a part — leave full to download the whole video</span>
+                </div>
+                <div class="trim-editor">
+                  <div class="trim-video-wrap loading" id="dl-trim-video-wrap">
+                    <video id="dl-trim-video" preload="metadata" playsinline></video>
+                    <audio id="dl-trim-audio" preload="auto"></audio>
+                    <div class="trim-play-overlay" id="dl-trim-play-overlay"></div>
+                    <div class="trim-loader" id="dl-trim-loader">
+                      <img class="trim-loader-mark" src="assets/mark.png" alt="" draggable="false" />
+                      <div class="trim-loader-text">loading preview</div>
+                    </div>
+                    <div class="trim-video-error">live preview not available — set Start / End below by hand</div>
+                  </div>
+                  <div class="trim-slider" id="dl-trim-slider">
+                    <div class="trim-track"></div>
+                    <div class="trim-range" id="dl-trim-range"></div>
+                    <div class="trim-playhead" id="dl-trim-playhead"></div>
+                    <div class="trim-handle trim-handle-start" id="dl-trim-handle-start" data-handle="start" tabindex="0"></div>
+                    <div class="trim-handle trim-handle-end"   id="dl-trim-handle-end"   data-handle="end"   tabindex="0"></div>
+                  </div>
+                  <div class="trim-times">
+                    <label>Start <input type="text" id="dl-trim-input-start" /></label>
+                    <label>End <input type="text" id="dl-trim-input-end" /></label>
+                    <span class="muted trim-duration" id="dl-trim-duration">—</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Shown until a link is pasted (preview + trim are hidden then) -->
+              <div class="dl-empty">
+                <span class="dl-empty-ic"><svg class="ic"><use href="#i-link"/></svg></span>
+                <span class="dl-empty-title">Paste a link to get started</span>
+                <span class="dl-empty-sub">A preview appears here — then trim just the part you want</span>
+              </div>
+            </div>
+            <aside class="dl-side">
+              <div class="share-note hidden" id="share-note">
+                <svg class="ic"><use href="#i-clipboard"/></svg>
+                <span>Paste a link, trim it if you like, and the clip lands on your clipboard — ready for
+                <kbd>Ctrl</kbd>+<kbd>V</kbd> in Discord or any chat. Nothing is saved; the temporary file deletes itself.</span>
+              </div>
+              <label class="dl-label" id="dl-savedir-row">
+                <span>Save to</span>
+                <div class="dl-row">
+                  <input type="text" id="download-savedir" placeholder="(default: ~\Downloads)" />
+                  <button class="btn" id="btn-pick-savedir">Browse…</button>
+                </div>
+              </label>
+
+              <label class="dl-label">
+                <span>Quality</span>
+                <select id="download-quality">
+                  <option value="best">Best available (any resolution)</option>
+                  <option value="1080p">1080p max</option>
+                  <option value="720p">720p max</option>
+                  <option value="480p">480p max</option>
+                  <option value="audio">Audio only (.m4a)</option>
+                </select>
+              </label>
+              <label class="dl-label hidden" id="dl-fit-row">
+                <span>Share as</span>
+                <select id="download-fit">
+                  <option value="20">Discord free — fit under 20 MB</option>
+                  <option value="50">Discord Nitro Basic — fit under 50 MB</option>
+                  <option value="">Original quality (no size limit)</option>
+                </select>
+              </label>
+              <div class="dl-row dl-toggles" id="dl-toggles-row">
+                <label class="dl-toggle">
+                  <input type="checkbox" id="download-playlist" />
+                  <span>Download whole playlist</span>
+                </label>
+                <label class="dl-toggle">
+                  <input type="checkbox" id="download-subs" />
+                  <span>Save subtitles (.srt)</span>
+                </label>
+              </div>
+              <label class="dl-label">
+                <span>Use cookies from</span>
+                <select id="download-browser">
+                  <option value="auto">Auto — only when a video needs it</option>
+                  <option value="">None (never use cookies)</option>
+                  <option value="chrome">Chrome</option>
+                  <option value="edge">Edge</option>
+                  <option value="firefox">Firefox</option>
+                  <option value="brave">Brave</option>
+                  <option value="opera">Opera</option>
+                  <option value="vivaldi">Vivaldi</option>
+                </select>
+              </label>
+              <button class="btn btn-primary btn-lg" id="btn-download">Download<svg class="ic"><use href="#i-arrow-right"/></svg></button>
+              <div class="dl-info muted" id="dl-info">
+                Supports YouTube, Twitter/X, Reddit, TikTok, Vimeo, and 1000+ other sites.
+                <span class="dl-info-save">Files save to your Downloads folder.</span>
+              </div>
+              <div class="dl-warning hidden" id="dl-warning">
+                <div><strong>yt-dlp isn't installed.</strong> Nibble needs it to download videos —
+                one click puts it next to the app (about 18 MB, no admin rights needed).</div>
+                <div class="dl-warning-actions">
+                  <button class="btn btn-primary btn-sm" id="btn-ytdlp-install"><svg class="ic"><use href="#i-download"/></svg>Install yt-dlp</button>
+                  <span class="muted" id="ytdlp-install-status"></span>
+                </div>
+              </div>
+              <!-- yt-dlp version + one-click update. yt-dlp breaks when sites change
+                   their internals, so keeping it current is the usual fix for
+                   "download failed / sign in to confirm / nsig" errors. -->
+              <div class="dl-ytdlp hidden" id="dl-ytdlp">
+                <span class="dl-ytdlp-ver muted" id="dl-ytdlp-ver">yt-dlp</span>
+                <span class="dl-ytdlp-badge hidden" id="dl-ytdlp-badge">update available</span>
+                <button class="btn btn-sm dl-ytdlp-btn" id="btn-ytdlp-update"><svg class="ic"><use href="#i-refresh"/></svg>Update yt-dlp</button>
+                <span class="dl-ytdlp-status muted" id="dl-ytdlp-status"></span>
+              </div>
+            </aside>
+          </div>
+
+          <div class="download-progress card hidden" id="download-progress">
+            <div class="dl-progress-head">
+              <div class="dl-name muted">Downloading…</div>
+              <button class="btn btn-sm btn-ghost-danger" id="btn-dl-cancel"><svg class="ic"><use href="#i-x"/></svg>Cancel</button>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" id="dl-progress-fill"></div></div>
+            <div class="dl-stats">
+              <span>Progress <span class="v" id="dl-percent">–</span></span>
+              <span>Speed <span class="v" id="dl-speed">–</span></span>
+              <span>ETA <span class="v" id="dl-eta">–</span></span>
+              <span>Size <span class="v" id="dl-size">–</span></span>
+            </div>
+          </div>
+
+          <div class="download-done card hidden" id="download-done">
+            <div class="dl-success"><svg class="ic"><use href="#i-check"/></svg>Downloaded</div>
+            <div class="dl-output" id="dl-output-name">—</div>
+            <div class="dl-actions">
+              <button class="btn" id="btn-dl-folder"><svg class="ic"><use href="#i-folder"/></svg>Open folder</button>
+              <button class="btn btn-primary" id="btn-dl-convert">Convert this file<svg class="ic"><use href="#i-arrow-right"/></svg></button>
+            </div>
+          </div>
+
+          <div class="download-shared card hidden" id="download-shared">
+            <div class="dl-success"><svg class="ic"><use href="#i-clipboard"/></svg>Copied to clipboard</div>
+            <div class="share-hint">Paste it with <kbd>Ctrl</kbd>+<kbd>V</kbd> into Discord, Messenger, e-mail or a folder.</div>
+            <div class="dl-output" id="share-file">—</div>
+            <div class="share-timer" id="share-timer">—</div>
+            <div class="dl-actions">
+              <button class="btn" id="btn-share-copy"><svg class="ic"><use href="#i-clipboard"/></svg>Copy again</button>
+              <button class="btn btn-ghost-danger" id="btn-share-delete"><svg class="ic"><use href="#i-trash"/></svg>Delete now</button>
+            </div>
+          </div>
+
+          <div class="download-failed card hidden" id="download-failed">
+            <div class="dl-fail"><svg class="ic"><use href="#i-x"/></svg>Download failed</div>
+            <div class="dl-error" id="dl-error">—</div>
+            <div class="dl-actions">
+              <button class="btn" id="btn-dl-retry">Try again</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =============== Settings =============== -->
+      <section id="view-settings" class="view view-settings">
+        <div class="picker-top">
+          <button class="btn-back" id="btn-back-from-settings"><svg class="ic"><use href="#i-chevron-left"/></svg>Back</button>
+          <h2 class="picker-title">Settings</h2>
+          <span class="settings-saved muted"><svg class="ic"><use href="#i-check"/></svg>Changes save automatically</span>
+        </div>
+
+        <div class="settings-layout">
+          <nav class="settings-nav" id="settings-nav" aria-label="Settings sections">
+            <button class="sn-item active" data-sec="set-appearance"><svg class="ic"><use href="#i-monitor"/></svg>Appearance</button>
+            <button class="sn-item" data-sec="set-convert"><svg class="ic"><use href="#i-refresh"/></svg>Conversion</button>
+            <button class="sn-item" data-sec="set-downloads"><svg class="ic"><use href="#i-download"/></svg>Downloads</button>
+            <button class="sn-item" data-sec="set-share"><svg class="ic"><use href="#i-share"/></svg>Quick share</button>
+            <button class="sn-item" data-sec="set-shots"><svg class="ic"><use href="#i-scan"/></svg>Screen capture</button>
+            <button class="sn-item" data-sec="set-rec"><svg class="ic"><use href="#i-film"/></svg>Recordings</button>
+            <button class="sn-item" data-sec="set-watch"><svg class="ic"><use href="#i-folder"/></svg>Watch folder</button>
+            <button class="sn-item" data-sec="set-history"><svg class="ic"><use href="#i-clock"/></svg>Recent Activity</button>
+            <button class="sn-item" data-sec="set-system"><svg class="ic"><use href="#i-cpu"/></svg>System</button>
+          </nav>
+
+          <div class="settings-body" id="settings-body">
+            <!-- Appearance -->
+            <section class="set-section" id="set-appearance">
+              <h3 class="set-title"><svg class="ic"><use href="#i-monitor"/></svg>Appearance</h3>
+              <div class="set-card">
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Interface size</div>
+                    <div class="set-hint">Text, icons and spacing.</div>
+                  </div>
+                  <div class="seg" id="set-uiscale" role="radiogroup" aria-label="Interface size">
+                    <button data-v="0.8">80%</button><button data-v="0.9">90%</button><button data-v="1">100%</button><button data-v="1.1">110%</button><button data-v="1.25">125%</button><button data-v="1.5">150%</button>
+                  </div>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Reduce motion</div>
+                    <div class="set-hint">Turns off slide and fade animations.</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" id="set-reduce-motion" /><span></span></label>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Background accents</div>
+                    <div class="set-hint">The soft red light streaks on the home screen.</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" id="set-decor" /><span></span></label>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Window size</div>
+                    <div class="set-hint">Window size after restart.</div>
+                  </div>
+                  <div class="set-ctl">
+                    <button class="btn btn-sm" id="set-reset-window">Reset size</button>
+                    <select class="set-select" id="set-remember-window">
+                      <option value="default">Default</option>
+                      <option value="last">Last used</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Conversion -->
+            <section class="set-section" id="set-convert">
+              <h3 class="set-title"><svg class="ic"><use href="#i-refresh"/></svg>Conversion</h3>
+              <div class="set-card">
+                <div class="set-row set-row-stack">
+                  <div class="set-text">
+                    <div class="set-label">Save converted files to</div>
+                    <div class="set-hint">Empty = next to the original file.</div>
+                  </div>
+                  <div class="dl-row">
+                    <input type="text" id="settings-convert-dir" placeholder="(next to the original file)" />
+                    <button class="btn" id="settings-pick-convert-dir">Browse…</button>
+                  </div>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">If the output file already exists</div>
+                  </div>
+                  <select class="set-select" id="set-overwrite">
+                    <option value="keep">Keep both — add (2), (3)…</option>
+                    <option value="overwrite">Overwrite it</option>
+                  </select>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Recommended preset</div>
+                    <div class="set-hint">Marked ★ in the preset list.</div>
+                  </div>
+                  <select class="set-select" id="settings-usecase">
+                    <option value="auto">General use — Convert to H.265</option>
+                    <option value="premiere">Compatibility — Convert to H.264</option>
+                    <option value="ae">After Effects — HDR → SDR · AE-ready</option>
+                    <option value="share">Sharing — Discord ≤ 20 MB</option>
+                  </select>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Open on the last used preset</div>
+                    <div class="set-hint">Off: always start on the recommended one.</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" id="set-remember-preset" /><span></span></label>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Show the result in Explorer when done</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" id="set-open-folder" /><span></span></label>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Desktop notification when finished</div>
+                    <div class="set-hint">Only while Nibble isn't the active window.</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" id="settings-notif" /><span></span></label>
+                </div>
+              </div>
+            </section>
+
+            <!-- Downloads -->
+            <section class="set-section" id="set-downloads">
+              <h3 class="set-title"><svg class="ic"><use href="#i-download"/></svg>Downloads</h3>
+              <div class="set-card">
+                <div class="set-row set-row-stack">
+                  <div class="set-text">
+                    <div class="set-label">Save downloads to</div>
+                    <div class="set-hint">Empty = your Downloads folder.</div>
+                  </div>
+                  <div class="dl-row">
+                    <input type="text" id="set-dl-dir" placeholder="(Downloads folder)" />
+                    <button class="btn" id="set-pick-dl-dir">Browse…</button>
+                  </div>
+                </div>
+                <div class="set-row">
+                  <div class="set-text"><div class="set-label">Default quality</div></div>
+                  <select class="set-select" id="set-dl-quality">
+                    <option value="best">Best available</option>
+                    <option value="1080p">1080p max</option>
+                    <option value="720p">720p max</option>
+                    <option value="480p">480p max</option>
+                    <option value="audio">Audio only (.m4a)</option>
+                  </select>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Use cookies from</div>
+                    <div class="set-hint">Auto tries without cookies first, then your installed browsers.</div>
+                  </div>
+                  <select class="set-select" id="set-dl-cookies">
+                    <option value="auto">Auto</option>
+                    <option value="">Never</option>
+                    <option value="firefox">Firefox</option>
+                    <option value="chrome">Chrome</option>
+                    <option value="edge">Edge</option>
+                    <option value="brave">Brave</option>
+                    <option value="opera">Opera</option>
+                    <option value="vivaldi">Vivaldi</option>
+                  </select>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Check for yt-dlp updates on start</div>
+                    <div class="set-hint" id="set-ytdlp-ver">yt-dlp —</div>
+                  </div>
+                  <div class="set-ctl">
+                    <button class="btn btn-sm" id="set-ytdlp-update"><svg class="ic"><use href="#i-refresh"/></svg>Update now</button>
+                    <label class="switch"><input type="checkbox" id="set-ytdlp-check" /><span></span></label>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Quick share -->
+            <section class="set-section" id="set-share">
+              <h3 class="set-title"><svg class="ic"><use href="#i-share"/></svg>Quick share</h3>
+              <div class="set-card">
+                <div class="set-row">
+                  <div class="set-text"><div class="set-label">Share as</div></div>
+                  <select class="set-select" id="set-share-fit">
+                    <option value="20">Discord free — under 20 MB</option>
+                    <option value="50">Nitro Basic — under 50 MB</option>
+                    <option value="">Original quality</option>
+                  </select>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Delete the temporary file after</div>
+                    <div class="set-hint">Apps read the file when you paste or send it, so give yourself time.</div>
+                  </div>
+                  <select class="set-select" id="set-share-ttl">
+                    <option value="2">2 minutes</option>
+                    <option value="5">5 minutes</option>
+                    <option value="10">10 minutes</option>
+                    <option value="30">30 minutes</option>
+                    <option value="60">1 hour</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            <!-- Screenshots -->
+            <section class="set-section" id="set-shots">
+              <h3 class="set-title"><svg class="ic"><use href="#i-scan"/></svg>Screen capture</h3>
+              <div class="set-card">
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Shortcut</div>
+                    <div class="set-hint" id="set-shot-hotkey-hint">Works anywhere, even when Nibble is in the background.</div>
+                  </div>
+                  <!-- Click, then press any combination (Esc cancels, × turns it off) -->
+                  <div class="hk-field" data-setting="shotHotkey" data-default="ctrl+shift+a">
+                    <button class="hk-btn" type="button" id="set-shot-hotkey" title="Click, then press a shortcut"></button>
+                    <button class="hk-clear" type="button" title="Turn the shortcut off" aria-label="Turn the shortcut off"><svg class="ic"><use href="#i-x"/></svg></button>
+                  </div>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">After taking a screenshot</div>
+                  </div>
+                  <select class="set-select" id="set-shot-action">
+                    <option value="copy">Copy to clipboard</option>
+                    <option value="save">Save to a file</option>
+                    <option value="both">Copy and save</option>
+                  </select>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Image format</div>
+                    <div class="set-hint">For saved screenshots. The clipboard always gets the full image.</div>
+                  </div>
+                  <select class="set-select" id="set-shot-format">
+                    <option value="png">PNG — lossless</option>
+                    <option value="jpg">JPG — smallest</option>
+                    <option value="webp">WebP — lossless, smaller</option>
+                  </select>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Show a preview popup</div>
+                    <div class="set-hint">Top centre of the screen — click it to open the image.</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" id="set-shot-popup" /><span></span></label>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Show the drawing toolbar</div>
+                    <div class="set-hint">Rectangle, ellipse, pen, line, arrow, text, blur and pixelate at the top of the capture screen.</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" id="set-shot-tools" /><span></span></label>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Play a sound</div>
+                    <div class="set-hint">The Windows notification sound.</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" id="set-shot-sound" /><span></span></label>
+                </div>
+                <div class="set-row set-row-stack">
+                  <div class="set-text">
+                    <div class="set-label">Save screenshots to</div>
+                    <div class="set-hint">Empty = Pictures\Nibble.</div>
+                  </div>
+                  <div class="dl-row">
+                    <input type="text" id="set-shot-dir" placeholder="(Pictures\Nibble)" />
+                    <button class="btn" id="set-pick-shot-dir">Browse…</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Recordings (video / GIF) -->
+            <section class="set-section" id="set-rec">
+              <h3 class="set-title"><svg class="ic"><use href="#i-film"/></svg>Recordings</h3>
+              <div class="set-card">
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Recording shortcut</div>
+                    <div class="set-hint" id="set-rec-hotkey-hint">Opens the capture screen in Video mode. Press it again to stop.</div>
+                  </div>
+                  <div class="hk-field" data-setting="recHotkey" data-default="ctrl+shift+r">
+                    <button class="hk-btn" type="button" id="set-rec-hotkey" title="Click, then press a shortcut"></button>
+                    <button class="hk-clear" type="button" title="Turn the shortcut off" aria-label="Turn the shortcut off"><svg class="ic"><use href="#i-x"/></svg></button>
+                  </div>
+                </div>
+                <div class="set-row">
+                  <div class="set-text"><div class="set-label">Format</div></div>
+                  <select class="set-select" id="set-rec-format">
+                    <option value="mp4">MP4 video</option>
+                    <option value="gif">Animated GIF</option>
+                  </select>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Countdown</div>
+                    <div class="set-hint">Seconds before the recording starts.</div>
+                  </div>
+                  <select class="set-select" id="set-rec-countdown">
+                    <option value="0">No delay</option>
+                    <option value="3">3 seconds</option>
+                    <option value="5">5 seconds</option>
+                    <option value="10">10 seconds</option>
+                  </select>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Sound</div>
+                    <div class="set-hint">MP4 only — GIFs have no sound.</div>
+                  </div>
+                  <select class="set-select" id="set-rec-audio">
+                    <option value="off">No sound</option>
+                    <option value="system">System sound</option>
+                    <option value="mic">Microphone</option>
+                  </select>
+                </div>
+                <div class="set-row">
+                  <div class="set-text"><div class="set-label">Show the mouse cursor</div></div>
+                  <label class="switch"><input type="checkbox" id="set-rec-cursor" /><span></span></label>
+                </div>
+                <div class="set-row">
+                  <div class="set-text"><div class="set-label">Frame rate</div></div>
+                  <select class="set-select" id="set-rec-fps">
+                    <option value="30">30 fps</option>
+                    <option value="60">60 fps</option>
+                  </select>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">GIF frame rate</div>
+                    <div class="set-hint">Lower = much smaller file.</div>
+                  </div>
+                  <select class="set-select" id="set-rec-giffps">
+                    <option value="10">10 fps</option>
+                    <option value="15">15 fps</option>
+                    <option value="20">20 fps</option>
+                    <option value="30">30 fps</option>
+                  </select>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Stop automatically after</div>
+                    <div class="set-hint">A safety net for recordings you forget to stop.</div>
+                  </div>
+                  <select class="set-select" id="set-rec-maxmin">
+                    <option value="5">5 minutes</option>
+                    <option value="15">15 minutes</option>
+                    <option value="30">30 minutes</option>
+                    <option value="60">1 hour</option>
+                    <option value="120">2 hours</option>
+                    <option value="0">No limit</option>
+                  </select>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Maximum file size</div>
+                    <div class="set-hint">Recording also stops when the disk has less than 1 GB free.</div>
+                  </div>
+                  <select class="set-select" id="set-rec-maxmb">
+                    <option value="500">500 MB</option>
+                    <option value="1024">1 GB</option>
+                    <option value="2048">2 GB</option>
+                    <option value="4096">4 GB</option>
+                    <option value="10240">10 GB</option>
+                    <option value="0">No limit</option>
+                  </select>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Copy to clipboard afterwards</div>
+                    <div class="set-hint">As a file — paste it straight into Discord or a chat.</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" id="set-rec-copy" /><span></span></label>
+                </div>
+                <div class="set-row set-row-stack">
+                  <div class="set-text">
+                    <div class="set-label">Save recordings to</div>
+                    <div class="set-hint">Empty = Videos\Nibble.</div>
+                  </div>
+                  <div class="dl-row">
+                    <input type="text" id="set-rec-dir" placeholder="(Videos\Nibble)" />
+                    <button class="btn" id="set-pick-rec-dir">Browse…</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Watch folder -->
+            <section class="set-section" id="set-watch">
+              <h3 class="set-title"><svg class="ic"><use href="#i-folder"/></svg>Watch folder</h3>
+              <div class="set-card">
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Auto-convert new clips</div>
+                    <div class="set-hint">New MP4 / MKV / MOV files in the folder are converted automatically — great for Shadowplay captures.</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" id="watch-enabled" /><span></span></label>
+                </div>
+                <div class="set-row set-row-stack">
+                  <div class="set-text"><div class="set-label">Folder to watch</div></div>
+                  <div class="dl-row">
+                    <input type="text" id="watch-folder" placeholder="(pick a folder)" />
+                    <button class="btn" id="watch-pick-folder">Browse…</button>
+                  </div>
+                </div>
+                <div class="set-row set-row-stack">
+                  <div class="set-text"><div class="set-label">Convert with preset</div></div>
+                  <select class="set-select set-select-wide" id="watch-preset"></select>
+                </div>
+                <div class="set-row set-row-stack">
+                  <div class="set-text">
+                    <div class="set-label">Output folder</div>
+                    <div class="set-hint">Empty = next to the original file.</div>
+                  </div>
+                  <div class="dl-row">
+                    <input type="text" id="watch-output" placeholder="(next to the original file)" />
+                    <button class="btn" id="watch-pick-output">Browse…</button>
+                  </div>
+                </div>
+                <div class="set-row set-row-foot">
+                  <div class="watch-status" id="watch-status">—</div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Recent Activity -->
+            <section class="set-section" id="set-history">
+              <h3 class="set-title"><svg class="ic"><use href="#i-clock"/></svg>Recent Activity</h3>
+              <div class="set-card">
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Ask before clearing</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" id="settings-confirm-clear-history" /><span></span></label>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Keep Recent Activity for</div>
+                    <div class="set-hint">Older entries are removed automatically. Your files stay where they are.</div>
+                  </div>
+                  <select class="set-select" id="set-hist-days">
+                    <option value="0">Always</option>
+                    <option value="1">1 day</option>
+                    <option value="7">1 week</option>
+                    <option value="30">1 month</option>
+                  </select>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Deleting a file</div>
+                    <div class="set-hint">What the × next to an entry does with the file.</div>
+                  </div>
+                  <select class="set-select" id="set-delete-mode">
+                    <option value="trash">Move to Recycle Bin</option>
+                    <option value="permanent">Delete permanently</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            <!-- System -->
+            <section class="set-section" id="set-system">
+              <h3 class="set-title"><svg class="ic"><use href="#i-cpu"/></svg>System</h3>
+              <div class="set-card">
+                <div class="set-row set-row-stack">
+                  <div class="set-text"><div class="set-label">Detected hardware</div></div>
+                  <div class="settings-hw" id="settings-hw">—</div>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Required tools</div>
+                    <div class="set-hint" id="set-tools-status">ffmpeg · yt-dlp</div>
+                  </div>
+                  <button class="btn btn-sm" id="set-show-welcome"><svg class="ic"><use href="#i-refresh"/></svg>Check again</button>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Custom presets</div>
+                    <div class="set-hint">Your own ffmpeg presets in a JSON file — they show up under <span class="accent">Custom</span>. Restart Nibble after editing.</div>
+                  </div>
+                  <button class="btn btn-sm" id="settings-edit-custom-presets"><svg class="ic"><use href="#i-code"/></svg>Open file</button>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Data folder</div>
+                    <div class="set-hint settings-storage" id="settings-storage-info">—</div>
+                  </div>
+                  <button class="btn btn-sm" id="set-open-data"><svg class="ic"><use href="#i-folder"/></svg>Open</button>
+                </div>
+                <div class="set-row">
+                  <div class="set-text">
+                    <div class="set-label">Reset all preferences</div>
+                    <div class="set-hint">Back to defaults. History and watch folder stay.</div>
+                  </div>
+                  <button class="btn btn-sm btn-ghost-danger" id="settings-reset">Reset…</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- =============== Converting =============== -->
+      <section id="view-converting" class="view view-converting">
+        <div class="picker-top">
+          <h2 class="picker-title" id="converting-title">Converting…</h2>
+          <button class="btn btn-ghost" id="btn-cancel">Cancel</button>
+        </div>
+        <div class="convert-list" id="convert-list"></div>
+
+        <div class="batch-summary card hidden" id="batch-summary">
+          <div class="summary-line"><span id="summary-ok" class="ok">0 OK</span><span id="summary-fail" class="fail">0 FAIL</span></div>
+          <button class="btn btn-primary" id="btn-return">Back to menu</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- First-run welcome + setup check (also: Settings → System → Welcome screen) -->
+    <div class="onboard hidden" id="onboard" role="dialog" aria-modal="true" aria-labelledby="ob-title">
+      <div class="onboard-backdrop"></div>
+      <div class="onboard-card">
+        <div class="ob-glow" aria-hidden="true"></div>
+        <img class="ob-logo" src="assets/logo.png" alt="Nibble" draggable="false" />
+        <h2 class="ob-title" id="ob-title">Welcome to Nibble</h2>
+        <p class="ob-desc">Take a screenshot, record your screen or grab a video from the web —
+          then keep just the part that matters. Let's make sure everything's ready.</p>
+
+        <div class="ob-section-label">Quick setup check</div>
+        <div class="ob-checks">
+          <div class="ob-row" id="ob-row-ffmpeg" data-state="checking">
+            <span class="ob-ic"><svg class="ic"><use href="#i-film"/></svg></span>
+            <span class="ob-text">
+              <span class="ob-name">ffmpeg</span>
+              <span class="ob-sub">Converting, trimming, compressing · required</span>
+            </span>
+            <span class="ob-state">
+              <span class="ob-spinner" aria-label="checking"></span>
+              <span class="ob-ready"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17 19 7.5"/></svg>Ready</span>
+              <button class="btn btn-sm btn-primary ob-install" data-tool="ffmpeg"><svg class="ic"><use href="#i-download"/></svg>Install</button>
+              <span class="ob-working">Installing…</span>
+            </span>
+            <span class="ob-bar"></span>
+          </div>
+          <div class="ob-row" id="ob-row-ytdlp" data-state="checking">
+            <span class="ob-ic"><svg class="ic"><use href="#i-link"/></svg></span>
+            <span class="ob-text">
+              <span class="ob-name">yt-dlp</span>
+              <span class="ob-sub">Downloads &amp; Quick share from links · ~18 MB</span>
+            </span>
+            <span class="ob-state">
+              <span class="ob-spinner" aria-label="checking"></span>
+              <span class="ob-ready"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17 19 7.5"/></svg>Ready</span>
+              <button class="btn btn-sm btn-primary ob-install" data-tool="ytdlp"><svg class="ic"><use href="#i-download"/></svg>Install</button>
+              <span class="ob-working">Installing…</span>
+            </span>
+            <span class="ob-bar"></span>
+          </div>
+        </div>
+        <div class="ob-note muted" id="ob-note">Everything installs next to Nibble — no admin rights, nothing system-wide.</div>
+
+        <div class="ob-foot">
+          <div class="ob-sig"><span>created by</span> <button class="author-link" title="github.com/xlzipx"><b>ZIPEEK</b></button></div>
+          <button class="btn btn-primary" id="ob-start">Get started<svg class="ic"><use href="#i-arrow-right"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast stack — fixed top-right, always above all views. JS appends nodes. -->
+    <div id="toast-stack" aria-live="polite"></div>
+
+    <script src="main.js"></script>
+  </body>
+</html>

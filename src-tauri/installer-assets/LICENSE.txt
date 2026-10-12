@@ -1,0 +1,62 @@
+Nibble
+Capture, trim and share - only what you need.
+by ZIPEEK
+
+================================================================
+ABOUT
+================================================================
+
+Everything for quick clips on Windows: screenshots and screen
+recordings with drawing tools, video downloads from YouTube, X and
+1000+ sites, trimming with a live preview and compression that fits
+Discord (20 / 50 / 500 MB).
+
+Built around ffmpeg with GPU acceleration (NVENC / AMF / QSV): it
+converts to AV1 / HEVC / H.264 and maps HDR to SDR.
+
+================================================================
+LICENSE
+================================================================
+
+Nibble is released under the MIT License.
+
+  MIT License
+
+  Copyright (c) 2026 ZIPEEK
+
+  Permission is hereby granted, free of charge, to any person
+  obtaining a copy of this software and associated documentation
+  files (the "Software"), to deal in the Software without
+  restriction, including without limitation the rights to use,
+  copy, modify, merge, publish, distribute, sublicense, and/or
+  sell copies of the Software, and to permit persons to whom
+  the Software is furnished to do so, subject to the following
+  conditions:
+
+  The above copyright notice and this permission notice shall
+  be included in all copies or substantial portions of the
+  Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+  KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+  WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+  PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS
+  OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+  OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+  OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+  SOFTWARE OR THE USE OR DEALINGS IN THE SOFTWARE.
+
+================================================================
+BUNDLED COMPONENTS
+================================================================
+
+This installer ships only the Nibble application binary.
+External tools (ffmpeg, ffprobe, yt-dlp) are NOT bundled; the app
+can download them on first launch, or use copies on PATH.
+Each is licensed under its own terms:
+
+  ffmpeg / ffprobe   LGPL / GPL    https://ffmpeg.org
+  yt-dlp             Unlicense     https://github.com/yt-dlp/yt-dlp
+
+By clicking "I Agree" you accept the MIT terms above and
+acknowledge the third-party licenses listed.

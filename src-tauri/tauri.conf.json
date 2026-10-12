@@ -1,0 +1,66 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Nibble",
+  "version": "1.0.0",
+  "identifier": "com.zipeek.nibble",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "create": false,
+        "title": "Nibble",
+        "width": 1010,
+        "height": 700,
+        "minWidth": 900,
+        "minHeight": 600,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' asset: http://asset.localhost https://asset.localhost; img-src 'self' data: https: asset: http://asset.localhost https://asset.localhost nshot: http://nshot.localhost; media-src 'self' data: blob: https: asset: http://asset.localhost https://asset.localhost nstream: http://nstream.localhost; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis"],
+    "publisher": "ZIPEEK",
+    "copyright": "Nibble by ZIPEEK",
+    "category": "Video",
+    "shortDescription": "Capture, trim and share — only what you need.",
+    "licenseFile": "installer-assets/LICENSE.txt",
+    "longDescription": "Nibble — everything for quick clips on Windows: screenshots and screen recordings with drawing tools, video downloads from YouTube, X and 1000+ sites, trimming with a live preview and compression that fits Discord. Converts on your GPU (AV1 / HEVC / H.264) and maps HDR to SDR.",
+    "homepage": "https://github.com/xlzipx",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "wix": {
+        "language": ["en-US"]
+      },
+      "nsis": {
+        "template": "installer-assets/installer.nsi",
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "installer-assets/header.bmp",
+        "sidebarImage": "installer-assets/sidebar.bmp",
+        "installerHooks": "installer-assets/installer-hooks.nsh",
+        "installMode": "currentUser",
+        "languages": ["English"]
+      }
+    }
+  }
+}

@@ -1,0 +1,1306 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Nibble capture</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body {
+        width: 100%; height: 100%; overflow: hidden;
+        background: transparent; cursor: crosshair; user-select: none;
+        font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+      }
+      /* The frozen screen, 1:1 (CSS size = physical pixels / devicePixelRatio) */
+      #shot { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+      /* Nothing is drawn until the frozen frame is decoded — the transparent
+         window shows the (identical) live desktop meanwhile. */
+      body:not(.ready) > * { visibility: hidden; }
+      /* Dim everything until a selection exists */
+      #dim { position: fixed; inset: 0; background: rgba(5, 6, 9, 0.45); pointer-events: none; }
+      #dim.hidden { display: none; }
+      /* Selection: transparent hole + huge shadow dims the rest */
+      #sel {
+        position: fixed; display: none; pointer-events: none;
+        border: 1px solid #ff3b5c;
+        box-shadow: 0 0 0 100vmax rgba(5, 6, 9, 0.55), 0 0 18px rgba(255, 59, 92, 0.35);
+      }
+      #sel::before, #sel::after {      /* corner ticks */
+        content: ""; position: absolute; width: 10px; height: 10px; border-color: #ff7a3d; border-style: solid;
+      }
+      #sel::before { left: -2px; top: -2px; border-width: 3px 0 0 3px; }
+      #sel::after  { right: -2px; bottom: -2px; border-width: 0 3px 3px 0; }
+      #size {
+        position: fixed; display: none; pointer-events: none;
+        font: 600 12px 'Cascadia Mono', Consolas, monospace; color: #fff;
+        background: linear-gradient(135deg, #ff7a3d, #ff3355 55%, #ff1f6b);
+        padding: 3px 8px; border-radius: 6px; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45); white-space: nowrap;
+      }
+      /* Crosshair guides */
+      .guide { position: fixed; pointer-events: none; background: rgba(255, 255, 255, 0.35); }
+      #gx { left: 0; right: 0; height: 1px; }
+      #gy { top: 0; bottom: 0; width: 1px; }
+      body.dragging .guide { display: none; }
+      /* Hint pill */
+      #hint {
+        position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+        display: flex; align-items: center; gap: 10px; pointer-events: none;
+        padding: 8px 14px; border-radius: 999px;
+        background: rgba(18, 20, 26, 0.92); border: 1px solid #2a2e38; color: #c9ccd4;
+        font-size: 13px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        animation: hint-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        transition: opacity 160ms;
+      }
+      #hint b { color: #fff; font-weight: 600; }
+      #hint .dot { width: 8px; height: 8px; border-radius: 50%; background: #ff3b5c; box-shadow: 0 0 10px #ff3b5c; }
+      #hint kbd {
+        font: 11px 'Cascadia Mono', Consolas, monospace; color: #eceef3;
+        background: #1a1d24; border: 1px solid #2a2e38; border-bottom-width: 2px; border-radius: 5px; padding: 0 5px;
+      }
+      body.dragging #hint { opacity: 0; }
+      /* Window under the cursor (ShareX-style): click captures exactly it */
+      #win {
+        position: fixed; display: none; pointer-events: none;
+        border: 2px solid #ff3b5c; border-radius: 2px;
+        background: rgba(255, 59, 92, 0.07);
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 0 22px rgba(255, 59, 92, 0.30);
+        transition: left 70ms ease-out, top 70ms ease-out, width 70ms ease-out, height 70ms ease-out;
+      }
+      #win-label {
+        position: fixed; display: none; pointer-events: none; max-width: 420px;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        font-size: 12px; color: #eceef3; background: rgba(18, 20, 26, 0.94);
+        border: 1px solid #2a2e38; padding: 3px 8px; border-radius: 6px;
+      }
+      #win-label b { font: 600 11px 'Cascadia Mono', Consolas, monospace; color: #ff7a8f; margin-left: 6px; }
+      #win.elem { border-style: dashed; border-width: 1.5px; background: rgba(255, 59, 92, 0.05); }
+      body.dragging #win, body.dragging #win-label { display: none !important; }
+      @keyframes hint-in { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+      /* ---- Drawing layer + toolbar ---- */
+      #ann { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; }
+      #hint { top: 72px; }
+      /* Image / Video switch + video quick settings */
+      #draw-tools, #rec-tools { display: contents; }
+      #rec-tools { display: none; }
+      body.mode-video #rec-tools { display: contents; }
+      body.mode-video #draw-tools, body:not(.has-tools) #draw-tools { display: none; }
+      body:not(.has-tools):not(.mode-video) #tools .tsep { display: none; }
+      .modes { display: flex; gap: 2px; padding: 2px; background: #0e1014; border: 1px solid #2a2e38; border-radius: 10px; }
+      .md {
+        height: 32px; display: flex; align-items: center; gap: 7px; padding: 0 12px 0 10px; border: 0; border-radius: 8px;
+        background: transparent; color: #a3a8b4; font: 600 12.5px 'Segoe UI', system-ui, sans-serif; cursor: pointer;
+        transition: background 120ms, color 120ms;
+      }
+      .md svg, .chip svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+      .md:hover { color: #eceef3; }
+      .md.on { color: #fff; background: linear-gradient(135deg, #ff7a3d, #ff3355 55%, #ff1f6b); box-shadow: 0 4px 14px rgba(255, 51, 85, 0.3); }
+      .seg { display: flex; gap: 2px; padding: 2px; background: #0e1014; border: 1px solid #2a2e38; border-radius: 10px; margin-right: 4px; }
+      .seg button {
+        height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: #a3a8b4; cursor: pointer;
+        font: 600 12px 'Cascadia Mono', Consolas, monospace;
+      }
+      .seg button:hover { color: #eceef3; }
+      .seg button.on { background: rgba(255, 59, 92, 0.18); color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 59, 92, 0.55); }
+      .chip {
+        height: 36px; display: flex; align-items: center; gap: 7px; padding: 0 11px; margin: 0 2px;
+        border: 1px solid #2a2e38; border-radius: 9px; background: #15171d; color: #a3a8b4; cursor: pointer;
+        font: 600 12px 'Segoe UI', system-ui, sans-serif; white-space: nowrap; transition: border-color 120ms, color 120ms, background 120ms;
+      }
+      .chip:hover { border-color: rgba(255, 59, 92, 0.5); color: #eceef3; }
+      .chip.on { color: #fff; border-color: rgba(255, 59, 92, 0.55); background: rgba(255, 59, 92, 0.12); }
+      .chip.off span { color: #6b7080; }
+      .chip:disabled { opacity: 0.4; cursor: default; }
+      #tools {
+        position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 5;
+        display: none; align-items: center; gap: 3px; padding: 5px;
+        background: rgba(18, 20, 26, 0.95); border: 1px solid #2a2e38; border-radius: 13px;
+        box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 59, 92, 0.05);
+        cursor: default; animation: hint-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        transition: opacity 140ms;
+      }
+      #tools { display: flex; }
+      body.dragging #tools { opacity: 0; pointer-events: none; }
+      body.drawing-now #tools { opacity: 0.35; pointer-events: none; }
+      .tb {
+        position: relative; width: 36px; height: 36px; display: grid; place-items: center;
+        border: 1px solid transparent; border-radius: 9px; background: transparent; color: #a3a8b4; cursor: pointer;
+        transition: background 120ms, color 120ms, border-color 120ms;
+      }
+      .tb:hover { background: #1c1f27; color: #eceef3; }
+      .tb.on { color: #fff; background: rgba(255, 59, 92, 0.16); border-color: rgba(255, 59, 92, 0.55); box-shadow: 0 0 14px rgba(255, 59, 92, 0.18); }
+      .tb svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+      .tb .k {
+        position: absolute; right: 3px; bottom: 1px; font: 600 8.5px 'Cascadia Mono', Consolas, monospace; color: #5a5f6b;
+      }
+      .tb.on .k { color: #ff9aab; }
+      #swatches { display: flex; align-items: center; flex-shrink: 0; }
+      #tools > * { flex-shrink: 0; }
+      .tsep { width: 1px; height: 22px; background: #2a2e38; margin: 0 5px; }
+      .sw {
+        width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.12); cursor: pointer; padding: 0;
+        margin: 0 2px; transition: transform 120ms, box-shadow 120ms;
+      }
+      .sw:hover { transform: scale(1.15); }
+      .sw.on { box-shadow: 0 0 0 2px #121419, 0 0 0 4px #eceef3; }
+      #tb-size i { display: block; border-radius: 50%; background: currentColor; }
+      .sw-wheel {
+        position: relative; background: conic-gradient(#ff3355, #ffd60a, #30d158, #22d3ee, #0a84ff, #bf5af2, #ff3355);
+        border-color: rgba(255, 255, 255, 0.25);
+      }
+      .sw-wheel i { position: absolute; inset: 3px; border-radius: 50%; display: none; border: 1.5px solid #121419; }
+      .sw-wheel.on i { display: block; }
+      .tb-font {
+        height: 36px; max-width: 170px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 10px;
+        border: 1px solid #2a2e38; border-radius: 9px; background: #15171d; color: #eceef3; cursor: pointer; font-size: 13px;
+      }
+      .tb-font span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .tb-font svg { width: 14px; height: 14px; flex-shrink: 0; fill: none; stroke: #8b909c; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+      .tb-font:hover, .tb-font.open { border-color: rgba(255, 59, 92, 0.5); }
+      .tb-fsize {
+        height: 36px; display: flex; align-items: center; gap: 2px; padding: 0 8px; margin-left: 3px;
+        border: 1px solid #2a2e38; border-radius: 9px; background: #15171d; color: #8b909c;
+        font: 11px 'Cascadia Mono', Consolas, monospace;
+      }
+      .tb-fsize input {
+        width: 34px; background: transparent; border: 0; outline: 0; color: #eceef3; text-align: right;
+        font: 600 13px 'Cascadia Mono', Consolas, monospace; -moz-appearance: textfield;
+      }
+      .tb-fsize input::-webkit-inner-spin-button { display: none; }
+      .tb-fsize:focus-within { border-color: rgba(255, 59, 92, 0.5); }
+      .tb-bold { font: 800 16px 'Segoe UI', system-ui, sans-serif; margin-left: 3px; }
+
+      .pop {
+        position: absolute; top: calc(100% + 8px); display: none; z-index: 6;
+        background: rgba(18, 20, 26, 0.98); border: 1px solid #2a2e38; border-radius: 13px; padding: 12px;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6); animation: pop-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+      .pop.open { display: block; }
+      @keyframes pop-in { from { opacity: 0; transform: translateY(-6px) scale(0.98); } to { opacity: 1; transform: none; } }
+      .wheel-wrap { position: relative; width: 180px; height: 180px; cursor: crosshair; }
+      #wheel { width: 180px; height: 180px; display: block; border-radius: 50%; }
+      #wheel-dot {
+        position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; pointer-events: none;
+        border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.5);
+      }
+      #wheel-val {
+        -webkit-appearance: none; appearance: none; display: block; width: 180px; height: 12px; margin: 12px 0 10px;
+        border-radius: 6px; outline: 0; cursor: pointer;
+      }
+      #wheel-val::-webkit-slider-thumb {
+        -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.5);
+      }
+      .pop-row { display: flex; align-items: center; gap: 8px; width: 180px; }
+      #wheel-prev { width: 26px; height: 26px; border-radius: 7px; border: 1px solid rgba(255, 255, 255, 0.15); flex-shrink: 0; }
+      #wheel-hex, #font-search {
+        flex: 1; min-width: 0; height: 30px; padding: 0 8px; border-radius: 8px; outline: 0;
+        background: #0e1014; border: 1px solid #2a2e38; color: #eceef3; font: 13px 'Cascadia Mono', Consolas, monospace;
+      }
+      #wheel-hex:focus, #font-search:focus { border-color: rgba(255, 59, 92, 0.55); }
+      #eyedrop { width: 30px; height: 30px; }
+      #eyedrop.on { color: #fff; background: rgba(255, 59, 92, 0.16); border-color: rgba(255, 59, 92, 0.55); }
+      body.picking, body.picking * { cursor: copy !important; }
+      #pop-font { width: 260px; padding: 10px; }
+      #font-search { display: block; width: 100%; font-family: 'Segoe UI', system-ui, sans-serif; }
+      #font-list { margin-top: 8px; max-height: 320px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #2a2e38 transparent; }
+      #font-list button {
+        display: block; width: 100%; text-align: left; padding: 6px 9px; border: 0; border-radius: 7px; background: transparent;
+        color: #c9ccd4; font-size: 16px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      #font-list button:hover { background: #1c1f27; color: #fff; }
+      #font-list button.on { background: rgba(255, 59, 92, 0.16); color: #fff; }
+      #font-list .empty { padding: 10px; color: #5a5f6b; font-size: 12px; }
+      #font-list button[hidden] { display: none; }
+      #pop-fsize { padding: 6px; width: 92px; }
+      #fsize-list { max-height: 300px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #2a2e38 transparent; }
+      #fsize-list button {
+        display: block; width: 100%; padding: 5px 10px; border: 0; border-radius: 7px; background: transparent; text-align: right;
+        color: #c9ccd4; font: 13px 'Cascadia Mono', Consolas, monospace; cursor: pointer;
+      }
+      #fsize-list button:hover { background: #1c1f27; color: #fff; }
+      #fsize-list button.on { background: rgba(255, 59, 92, 0.16); color: #fff; }
+
+      /* Selected drawing: bounding box + handles (move / resize like ShareX) */
+      #obox { position: fixed; display: none; pointer-events: none; outline: 1px dashed rgba(255, 255, 255, 0.85); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5); }
+      #obox.on { display: block; }
+      #obox .h {
+        position: absolute; width: 11px; height: 11px; margin: -6px 0 0 -6px; pointer-events: auto;
+        background: #fff; border: 1.5px solid #ff3b5c; border-radius: 3px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+      }
+      #obox .h.pt { border-radius: 50%; cursor: crosshair; }
+      #obox .h[data-h="nw"], #obox .h[data-h="se"] { cursor: nwse-resize; }
+      #obox .h[data-h="ne"], #obox .h[data-h="sw"] { cursor: nesw-resize; }
+      #obox .h[data-h="n"], #obox .h[data-h="s"] { cursor: ns-resize; }
+      #obox .h[data-h="e"], #obox .h[data-h="w"] { cursor: ew-resize; }
+      body.over-obj, body.over-obj * { cursor: move !important; }
+      body.moving, body.moving * { cursor: grabbing !important; }
+      body.dragging #obox, body.drawing-now #obox { display: none; }
+      body.drawing-mode #dim, body.drawing-mode .guide,
+      body.drawing-mode #win, body.drawing-mode #win-label { display: none !important; }
+      body.drawing-mode.tool-text { cursor: text; }
+      .txt-edit {
+        position: fixed; min-width: 6px; white-space: pre; outline: 1px dashed rgba(255, 255, 255, 0.7); outline-offset: 3px;
+        font-family: 'Segoe UI', system-ui, sans-serif; font-weight: 700; line-height: 1.2; cursor: text;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55); caret-color: currentColor; user-select: text;
+      }
+    </style>
+  </head>
+  <body>
+    <img id="shot" alt="" draggable="false" crossorigin="anonymous" />
+    <canvas id="ann"></canvas>
+    <div id="obox"></div>
+    <div id="dim"></div>
+    <div class="guide" id="gx"></div>
+    <div class="guide" id="gy"></div>
+    <div id="win"></div>
+    <div id="win-label"></div>
+    <div id="sel"></div>
+    <div id="size"></div>
+    <div id="tools">
+      <div class="modes">
+        <button class="md" data-mode="image" title="Screenshot"><svg viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/></svg>Image</button>
+        <button class="md" data-mode="video" title="Record a video or GIF"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m16 10.5 6-3.5v10l-6-3.5"/></svg>Video</button>
+      </div>
+      <span class="tsep"></span>
+      <!-- Video quick settings (same values as Settings → Screen capture) -->
+      <span id="rec-tools">
+        <span class="seg" id="rec-format">
+          <button data-v="mp4" title="MP4 video">MP4</button>
+          <button data-v="gif" title="Animated GIF (no sound)">GIF</button>
+        </span>
+        <button class="chip" id="rec-countdown" title="Countdown before recording starts"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg><span></span></button>
+        <button class="chip" id="rec-audio" title="Sound: off / what the PC plays / microphone"><svg viewBox="0 0 24 24"></svg><span></span></button>
+        <button class="chip" id="rec-cursor" title="Show the mouse cursor in the recording"><svg viewBox="0 0 24 24"><path d="m4 3 7 17 2.5-7.5L21 10z"/></svg><span></span></button>
+      </span>
+      <span id="draw-tools">
+      <button class="tb" data-tool="region" title="Select an area (1)"><svg viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 12h8M12 8v8" opacity=".55"/></svg><span class="k">1</span></button>
+      <span class="tsep"></span>
+      <button class="tb" data-tool="rect" title="Rectangle (2) · Shift = square"><svg viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="1.5"/></svg><span class="k">2</span></button>
+      <button class="tb" data-tool="ellipse" title="Ellipse (3) · Shift = circle"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="9" ry="7"/></svg><span class="k">3</span></button>
+      <button class="tb" data-tool="pen" title="Pen (4)"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span class="k">4</span></button>
+      <button class="tb" data-tool="line" title="Line (5) · Shift = 45° steps"><svg viewBox="0 0 24 24"><path d="M5 19 19 5"/></svg><span class="k">5</span></button>
+      <button class="tb" data-tool="arrow" title="Arrow (6) · Shift = 45° steps"><svg viewBox="0 0 24 24"><path d="M5 19 19 5"/><path d="M9 5h10v10"/></svg><span class="k">6</span></button>
+      <button class="tb" data-tool="text" title="Text (7)"><svg viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg><span class="k">7</span></button>
+      <button class="tb" data-tool="blur" title="Blur (8)"><svg viewBox="0 0 24 24"><path d="M12 2.7S5.5 9.6 5.5 14a6.5 6.5 0 0 0 13 0c0-4.4-6.5-11.3-6.5-11.3Z"/></svg><span class="k">8</span></button>
+      <button class="tb" data-tool="pixel" title="Pixelate (9)"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="6" height="6"/><rect x="15" y="3" width="6" height="6"/><rect x="9" y="9" width="6" height="6"/><rect x="3" y="15" width="6" height="6"/><rect x="15" y="15" width="6" height="6"/></svg><span class="k">9</span></button>
+      <span class="tsep"></span>
+      <span id="swatches"></span>
+      <button class="sw sw-wheel" id="sw-custom" title="Pick any colour"><i></i></button>
+      <button class="tb" id="tb-size" title="Line thickness"><i></i></button>
+      <span class="tsep"></span>
+      <button class="tb-font" id="tb-font" title="Text font"><span id="tb-font-name">Segoe UI</span><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+      <label class="tb-fsize" title="Text size (px) · mouse wheel to change"><input id="tb-fsize" type="number" min="8" max="300" step="1" /><span>px</span></label>
+      <button class="tb tb-bold" id="tb-bold" title="Bold text">B</button>
+      <!-- Colour wheel -->
+      <div class="pop" id="pop-color">
+        <div class="wheel-wrap"><canvas id="wheel" width="360" height="360"></canvas><span id="wheel-dot"></span></div>
+        <input type="range" id="wheel-val" min="0" max="100" title="Brightness" />
+        <div class="pop-row">
+          <span id="wheel-prev"></span>
+          <input id="wheel-hex" maxlength="7" spellcheck="false" />
+          <button class="tb" id="eyedrop" title="Pick a colour from the screen"><svg viewBox="0 0 24 24"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg></button>
+        </div>
+      </div>
+      <!-- Text size presets -->
+      <div class="pop" id="pop-fsize"><div id="fsize-list"></div></div>
+      <!-- Font list -->
+      <div class="pop" id="pop-font">
+        <input id="font-search" placeholder="Search fonts…" spellcheck="false" />
+        <div id="font-list"></div>
+      </div>
+      <span class="tsep"></span>
+      <button class="tb" id="tb-undo" title="Undo (Ctrl+Z)"><svg viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg></button>
+      <button class="tb" id="tb-clear" title="Remove all drawings"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>
+      </span>
+    </div>
+    <div id="hint"><span class="dot"></span><span id="hint-text"></span></div>
+
+    <script>
+      const { invoke, convertFileSrc } = window.__TAURI__.core;
+      const $ = (id) => document.getElementById(id);
+      const shot = $('shot'), sel = $('sel'), size = $('size'), dim = $('dim');
+      const gx = $('gx'), gy = $('gy'), winBox = $('win'), winLabel = $('win-label');
+      const SNAP = 10;          // CSS px: edges this close snap to window / screen edges
+      const DRAG_MIN = 4;       // CSS px: less movement than this = a click
+      let wins = [];            // visible windows, topmost first (CSS px)
+      let start = null, dragging = false, done = true, hover = null, openedAt = 0;
+      // Small event log for diagnostics (window.__log in DevTools)
+      const T0 = Date.now(); window.__log = [];
+      const log = (m) => { window.__log.push((Date.now() - T0) + ' ' + m); if (window.__log.length > 60) window.__log.shift(); };
+      document.addEventListener('visibilitychange', () => log('visibility ' + document.visibilityState));
+      const dpr = () => window.devicePixelRatio || 1;
+
+      // ================= Drawing tools =================
+      // Annotations live in CSS px; the canvases are at frame resolution
+      // (K = frame px per CSS px), so the result is pixel-sharp.
+      const ann = $('ann'), actx = ann.getContext('2d');
+      const cache = document.createElement('canvas'), cctx = cache.getContext('2d');  // committed drawings
+      const COLORS = ['#ff3355', '#ff9f0a', '#ffd60a', '#30d158', '#0a84ff', '#ffffff', '#16181d'];
+      const LINE = [3, 5, 9], BLUR = [6, 10, 16], PIX = [8, 12, 20];
+      const TOOL_KEYS = ['region', 'rect', 'ellipse', 'pen', 'line', 'arrow', 'text', 'blur', 'pixel'];
+      const HINTS = {
+        region: '<b>Click</b> a window · <b>drag</b> to select an area · <kbd>Esc</kbd> to cancel',
+        rect: '<b>Drag</b> to draw a rectangle · <kbd>1</kbd> back to selecting',
+        ellipse: '<b>Drag</b> to draw an ellipse · <kbd>1</kbd> back to selecting',
+        pen: '<b>Drag</b> to draw freehand · <kbd>1</kbd> back to selecting',
+        line: '<b>Drag</b> to draw a straight line · <kbd>1</kbd> back to selecting',
+        arrow: '<b>Drag</b> from the tail to the tip · <kbd>1</kbd> back to selecting',
+        text: '<b>Click</b> to type · <kbd>Enter</kbd> to place it · <kbd>1</kbd> back to selecting',
+        blur: '<b>Drag</b> over what to blur · <kbd>1</kbd> back to selecting',
+        pixel: '<b>Drag</b> over what to pixelate · <kbd>1</kbd> back to selecting',
+      };
+      let K = 1, tool = 'region', anns = [], cur = null, drawingNow = false, textEd = null;
+      let color = COLORS[0], sizeIx = 1, custom = '#bf5af2';
+      let font = 'Segoe UI', fsize = 28, bold = true;
+      const HEX = /^#[0-9a-f]{6}$/i;
+      try {
+        const d = JSON.parse(localStorage.getItem('nibble.shot.draw') || '{}');
+        if (HEX.test(d.custom)) custom = d.custom;
+        if (HEX.test(d.color)) color = d.color;
+        if ([0, 1, 2].includes(d.size)) sizeIx = d.size;
+        if (typeof d.font === 'string' && d.font) font = d.font;
+        if (d.fsize >= 8 && d.fsize <= 300) fsize = d.fsize;
+        if (typeof d.bold === 'boolean') bold = d.bold;
+      } catch (e) { /* defaults */ }
+      const saveDraw = () => {
+        try { localStorage.setItem('nibble.shot.draw', JSON.stringify({ color, size: sizeIx, custom, font, fsize, bold })); } catch (e) { /* noop */ }
+      };
+      // Text settings changed while typing → restyle the open editor
+      const styleEditor = () => {
+        if (!textEd) return;
+        Object.assign(textEd.style, { color, fontFamily: `"${font}"`, fontSize: fsize + 'px', fontWeight: bold ? '700' : '400' });
+        Object.assign(textEd.dataset, { font, fsize, bold: bold ? '1' : '' });
+      };
+      const toolsEnabled = () => {
+        try { return JSON.parse(localStorage.getItem('nibble.settings.v1') || '{}').shotTools !== false; } catch (e) { return true; }
+      };
+
+      // ---- Image / Video mode + recording quick settings ----
+      // 'nibble.rec' is shared with Settings → Screen capture (main window).
+      const REC_KEY = 'nibble.rec';
+      const REC_DEFAULTS = { format: 'mp4', countdown: 3, audio: 'off', cursor: true, fps: 30, gifFps: 15, dir: '', copy: true, maxMin: 60, maxMb: 2048 };
+      let mode = 'image';
+      const loadRec = () => {
+        try { return { ...REC_DEFAULTS, ...JSON.parse(localStorage.getItem(REC_KEY) || '{}') }; } catch (e) { return { ...REC_DEFAULTS }; }
+      };
+      let rec = loadRec();
+      const saveRec = () => { try { localStorage.setItem(REC_KEY, JSON.stringify(rec)); } catch (e) { /* noop */ } };
+      const AUDIO_ICONS = {
+        off: '<path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6"/>',
+        system: '<path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>',
+        mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/>',
+      };
+      function paintRec() {
+        $('rec-format').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === rec.format));
+        const cd = $('rec-countdown');
+        cd.querySelector('span').textContent = rec.countdown ? rec.countdown + ' s' : 'No delay';
+        cd.classList.toggle('off', !rec.countdown);
+        const au = $('rec-audio'), gif = rec.format === 'gif';
+        au.querySelector('svg').innerHTML = AUDIO_ICONS[gif ? 'off' : rec.audio] || AUDIO_ICONS.off;
+        au.querySelector('span').textContent = gif ? 'No sound' : { off: 'No sound', system: 'System sound', mic: 'Microphone' }[rec.audio] || 'No sound';
+        au.classList.toggle('off', gif || rec.audio === 'off');
+        au.classList.toggle('on', !gif && rec.audio !== 'off');
+        au.disabled = gif;
+        au.title = gif ? 'GIFs have no sound' : 'Sound: off / what the PC plays / microphone';
+        const cu = $('rec-cursor');
+        cu.querySelector('span').textContent = rec.cursor ? 'Cursor' : 'No cursor';
+        cu.classList.toggle('on', rec.cursor);
+        cu.classList.toggle('off', !rec.cursor);
+      }
+      $('rec-format').querySelectorAll('button').forEach((b) => (b.onclick = () => { rec.format = b.dataset.v; saveRec(); paintRec(); }));
+      $('rec-countdown').onclick = () => {
+        const steps = [0, 3, 5, 10];
+        rec.countdown = steps[(steps.indexOf(rec.countdown) + 1) % steps.length];
+        saveRec(); paintRec();
+      };
+      $('rec-audio').onclick = () => {
+        const steps = ['off', 'system', 'mic'];
+        rec.audio = steps[(steps.indexOf(rec.audio) + 1) % steps.length];
+        saveRec(); paintRec();
+      };
+      $('rec-cursor').onclick = () => { rec.cursor = !rec.cursor; saveRec(); paintRec(); };
+      function setMode(m) {
+        if (textEd) commitText();
+        mode = m === 'video' ? 'video' : 'image';
+        if (mode === 'video') { tool = 'region'; select(null); closePops(); }
+        document.body.classList.toggle('mode-video', mode === 'video');
+        document.querySelectorAll('.md').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
+        paintToolbar();
+        paintRec();
+      }
+      document.querySelectorAll('.md').forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
+
+      const sw = $('swatches');
+      COLORS.forEach((c) => {
+        const b = document.createElement('button');
+        b.className = 'sw'; b.style.background = c; b.dataset.c = c; b.title = 'Colour';
+        b.onclick = () => { color = c; closePops(); saveDraw(); paintToolbar(); styleEditor(); applyToSel('color'); };
+        sw.appendChild(b);
+      });
+      function paintToolbar() {
+        document.querySelectorAll('.tb[data-tool]').forEach((b) => b.classList.toggle('on', b.dataset.tool === tool));
+        sw.querySelectorAll('.sw').forEach((b) => b.classList.toggle('on', b.dataset.c === color));
+        const isCustom = !COLORS.includes(color);
+        $('sw-custom').classList.toggle('on', isCustom);
+        $('sw-custom').firstElementChild.style.background = color;
+        const dot = $('tb-size').firstElementChild, d = [5, 8, 12][sizeIx];
+        dot.style.width = dot.style.height = d + 'px';
+        $('tb-font-name').textContent = font;
+        $('tb-font-name').style.fontFamily = `"${font}"`;
+        if (document.activeElement !== $('tb-fsize')) $('tb-fsize').value = fsize;
+        $('tb-bold').classList.toggle('on', bold);
+        $('hint-text').innerHTML = mode === 'video'
+          ? '<b>Click</b> a window · <b>drag</b> an area to record · <kbd>Esc</kbd> to cancel'
+          : HINTS[tool];
+        document.body.classList.toggle('drawing-mode', tool !== 'region');
+        document.body.classList.toggle('tool-text', tool === 'text');
+      }
+      function setTool(t) {
+        if (textEd) commitText();
+        tool = t;
+        select(null);
+        if (t !== 'region') showHover(null);
+        paintToolbar();
+      }
+      document.querySelectorAll('.tb[data-tool]').forEach((b) => (b.onclick = () => setTool(b.dataset.tool)));
+      $('tb-size').onclick = () => { sizeIx = (sizeIx + 1) % 3; saveDraw(); paintToolbar(); applyToSel('size'); };
+      $('tb-undo').onclick = () => undo();
+      $('tb-clear').onclick = () => {
+        if (textEd) cancelText();
+        if (!anns.length) return;
+        remember(); anns = []; select(null); rebuild();
+      };
+      // Toolbar clicks never reach the selection / drawing handlers. Text and
+      // colour controls keep an open text editor (they restyle it instead).
+      $('tools').addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        if (!e.target.closest('input')) e.preventDefault();      // keep focus in the text editor
+        if (textEd && !e.target.closest('.sw, #tb-size, .tb-font, .tb-fsize, .tb-bold, .pop')) commitText();
+        if (!e.target.closest('.pop, #sw-custom, #tb-font, .tb-fsize')) closePops();
+      });
+      $('tools').addEventListener('mouseup', (e) => e.stopPropagation());
+      // Typing in toolbar fields must not switch tools / cancel the capture
+      $('tools').addEventListener('keydown', (e) => {
+        if (!e.target.closest('input')) return;
+        e.stopPropagation();
+        if (e.key === 'Escape') { closePops(); e.target.blur(); }
+        if (e.key === 'Enter') e.target.blur();
+      });
+
+      // ---- Text settings: font, size, bold ----
+      $('tb-bold').onclick = () => { bold = !bold; saveDraw(); paintToolbar(); styleEditor(); applyToSel('text'); };
+      const fsizeIn = $('tb-fsize');
+      const setFsize = (v) => {
+        v = Math.round(Math.min(300, Math.max(8, v)));
+        if (!isFinite(v)) return;
+        fsize = v; saveDraw(); styleEditor(); applyToSel('text');
+        fsizeIn.value = v;
+      };
+      fsizeIn.addEventListener('change', () => setFsize(parseFloat(fsizeIn.value) || fsize));
+      fsizeIn.addEventListener('blur', () => { fsizeIn.value = fsize; if (textEd) textEd.focus(); });
+      fsizeIn.parentElement.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        setFsize(fsize + (e.deltaY < 0 ? 1 : -1) * (e.shiftKey ? 10 : 2));
+      }, { passive: false });
+
+      // Text size presets (the field still takes any number)
+      const FSIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64, 72, 96, 128];
+      FSIZES.forEach((v) => {
+        const b = document.createElement('button');
+        b.textContent = v;
+        b.dataset.v = v;
+        b.onclick = () => { setFsize(v); closePops(); };
+        $('fsize-list').appendChild(b);
+      });
+      function openFsizePop() {
+        if ($('pop-fsize').classList.contains('open')) return;
+        closePops();
+        placePop($('pop-fsize'), fsizeIn.parentElement, 46);
+        $('fsize-list').querySelectorAll('button').forEach((b) => b.classList.toggle('on', +b.dataset.v === fsize));
+        $('pop-fsize').classList.add('open');
+        $('fsize-list').querySelector('.on')?.scrollIntoView({ block: 'center' });
+      }
+      fsizeIn.parentElement.addEventListener('mousedown', openFsizePop);
+
+      // Font list: built once; each row gets its font only when scrolled into
+      // view (applying 500 fonts at once stalls the page while they load).
+      let fonts = null, fontsAsked = false, fontRows = [];
+      const fontObs = new IntersectionObserver((ents) => {
+        for (const en of ents) {
+          if (en.isIntersecting) { en.target.style.fontFamily = `"${en.target.dataset.f}"`; fontObs.unobserve(en.target); }
+        }
+      }, { root: $('font-list'), rootMargin: '120px 0px' });
+      function loadFonts() {
+        if (fontsAsked) return;
+        fontsAsked = true;
+        invoke('system_fonts').then((f) => {
+          fonts = f && f.length ? f : ['Segoe UI', 'Arial', 'Consolas'];
+          const list = $('font-list'), frag = document.createDocumentFragment();
+          list.innerHTML = '';
+          fontRows = fonts.map((name) => {
+            const b = document.createElement('button');
+            b.textContent = name;
+            b.dataset.f = name;
+            b.onclick = () => { font = name; applyToSel('text'); saveDraw(); paintToolbar(); styleEditor(); closePops(); };
+            fontObs.observe(b);
+            frag.appendChild(b);
+            return b;
+          });
+          list.appendChild(frag);
+          if ($('pop-font').classList.contains('open')) filterFonts(true);
+        }).catch(() => { fontsAsked = false; });
+      }
+      function filterFonts(scroll) {
+        const q = $('font-search').value.trim().toLowerCase();
+        let shown = 0;
+        for (const b of fontRows) {
+          const hit = !q || b.dataset.f.toLowerCase().includes(q);
+          b.hidden = !hit;
+          b.classList.toggle('on', b.dataset.f === font);
+          if (hit) shown++;
+        }
+        let empty = $('font-list').querySelector('.empty');
+        if (!shown) {
+          if (!empty) { empty = document.createElement('div'); empty.className = 'empty'; $('font-list').appendChild(empty); }
+          empty.textContent = fonts ? 'No font matches' : 'Loading fonts…';
+        } else if (empty) empty.remove();
+        if (scroll) $('font-list').querySelector('.on')?.scrollIntoView({ block: 'center' });
+      }
+      $('font-search').addEventListener('input', () => filterFonts(false));
+      $('tb-font').onclick = () => {
+        const open = !$('pop-font').classList.contains('open');
+        closePops();
+        if (!open) return;
+        placePop($('pop-font'), $('tb-font'));
+        $('pop-font').classList.add('open');
+        $('tb-font').classList.add('open');
+        $('font-search').value = '';
+        loadFonts();
+        filterFonts(true);
+        if (!textEd) setTimeout(() => $('font-search').focus(), 0);
+      };
+
+      // ---- Colour wheel (hue = angle, saturation = radius) + brightness ----
+      let hsv = { h: 0, s: 1, v: 1 };
+      const wheel = $('wheel'), wctx = wheel.getContext('2d');
+      function hsvToRgb(h, s, v) {
+        const f = (n) => { const k = (n + h / 60) % 6; return Math.round((v - v * s * Math.max(0, Math.min(k, 4 - k, 1))) * 255); };
+        return [f(5), f(3), f(1)];
+      }
+      function hsvToHex({ h, s, v }) {
+        return '#' + hsvToRgb(h, s, v).map((x) => x.toString(16).padStart(2, '0')).join('');
+      }
+      function hexToHsv(hex) {
+        const n = parseInt(hex.slice(1), 16), r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+        const mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
+        let h = 0;
+        if (d) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+        return { h: (h * 60 + 360) % 360, s: mx ? d / mx : 0, v: mx };
+      }
+      function drawWheel() {
+        const S = wheel.width, R = S / 2, img = wctx.createImageData(S, S), px = img.data;
+        for (let y = 0; y < S; y++) {
+          for (let x = 0; x < S; x++) {
+            const dx = x - R + 0.5, dy = y - R + 0.5, r = Math.hypot(dx, dy);
+            if (r > R) continue;
+            const [cr, cg, cb] = hsvToRgb((Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360, r / R, hsv.v);
+            const i = (y * S + x) * 4;
+            px[i] = cr; px[i + 1] = cg; px[i + 2] = cb;
+            px[i + 3] = r > R - 1 ? Math.round((R - r) * 255) : 255;     // soft edge
+          }
+        }
+        wctx.putImageData(img, 0, 0);
+      }
+      function paintWheelUi() {
+        const a = hsv.h * Math.PI / 180, r = hsv.s * 90;
+        Object.assign($('wheel-dot').style, { left: 90 + Math.cos(a) * r + 'px', top: 90 + Math.sin(a) * r + 'px', background: color });
+        $('wheel-val').value = Math.round(hsv.v * 100);
+        $('wheel-val').style.background = `linear-gradient(90deg, #000, ${hsvToHex({ ...hsv, v: 1 })})`;
+        $('wheel-prev').style.background = color;
+        if (document.activeElement !== $('wheel-hex')) $('wheel-hex').value = color.toUpperCase();
+      }
+      function setCustom(hex, fromHsv) {
+        color = custom = hex.toLowerCase();
+        if (!fromHsv) { const v0 = hsv.v; hsv = hexToHsv(color); if (hsv.v !== v0) drawWheel(); }
+        saveDraw(); paintToolbar(); paintWheelUi(); styleEditor(); applyToSel('color');
+      }
+      $('sw-custom').onclick = () => {
+        const open = !$('pop-color').classList.contains('open');
+        closePops();
+        if (!open) return;
+        if (COLORS.includes(color)) setCustom(custom);       // first click: switch to the custom colour
+        hsv = hexToHsv(color);
+        drawWheel(); paintWheelUi();
+        placePop($('pop-color'), $('sw-custom'));
+        $('pop-color').classList.add('open');
+      };
+      const wheelPick = (e) => {
+        const r = wheel.getBoundingClientRect();
+        const dx = e.clientX - r.left - r.width / 2, dy = e.clientY - r.top - r.height / 2;
+        hsv.h = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+        hsv.s = Math.min(1, Math.hypot(dx, dy) / (r.width / 2));
+        if (hsv.v < 0.05) { hsv.v = 1; drawWheel(); }        // picking on a black wheel → light it up
+        setCustom(hsvToHex(hsv), true);
+      };
+      let wheelDrag = false;
+      wheel.parentElement.addEventListener('mousedown', (e) => { wheelDrag = true; wheelPick(e); });
+      window.addEventListener('mousemove', (e) => { if (wheelDrag) wheelPick(e); }, true);
+      window.addEventListener('mouseup', () => { wheelDrag = false; }, true);
+      $('wheel-val').addEventListener('input', (e) => { hsv.v = e.target.value / 100; drawWheel(); setCustom(hsvToHex(hsv), true); });
+      $('wheel-hex').addEventListener('input', (e) => {
+        let v = e.target.value.trim();
+        if (!v.startsWith('#')) v = '#' + v;
+        if (HEX.test(v)) setCustom(v);
+      });
+      // Eyedropper: the next click on the frozen screen picks its colour
+      let picking = false;
+      $('eyedrop').onclick = () => {
+        picking = !picking;
+        $('eyedrop').classList.toggle('on', picking);
+        document.body.classList.toggle('picking', picking);
+      };
+      function pickAt(x, y) {
+        const c = document.createElement('canvas');
+        c.width = c.height = 1;
+        const g = c.getContext('2d');
+        g.drawImage(shot, Math.floor(x * K), Math.floor(y * K), 1, 1, 0, 0, 1, 1);
+        const d = g.getImageData(0, 0, 1, 1).data;
+        picking = false;
+        $('eyedrop').classList.remove('on');
+        document.body.classList.remove('picking');
+        setCustom('#' + [d[0], d[1], d[2]].map((n) => n.toString(16).padStart(2, '0')).join(''));
+      }
+
+      function placePop(pop, anchor, half = 110) {
+        const tr = $('tools').getBoundingClientRect(), ar = anchor.getBoundingClientRect();
+        pop.style.left = Math.max(0, ar.left - tr.left + ar.width / 2 - half) + 'px';
+      }
+      function closePops() {
+        document.querySelectorAll('.pop.open').forEach((p) => p.classList.remove('open'));
+        $('tb-font').classList.remove('open');
+      }
+
+      function norm(a) {
+        return { x: Math.min(a.x1, a.x2), y: Math.min(a.y1, a.y2), w: Math.abs(a.x2 - a.x1), h: Math.abs(a.y2 - a.y1) };
+      }
+
+      // ================= Undo + select / move / resize drawings =================
+      let past = [], selObj = null, op = null, lastApply = { key: '', t: 0 };
+      const clone = (v) => JSON.parse(JSON.stringify(v));
+      const remember = () => { past.push(clone(anns)); if (past.length > 100) past.shift(); };
+      function undo() {
+        if (textEd) { cancelText(); return; }
+        if (!past.length) return;
+        anns = past.pop();
+        select(null);
+        rebuild();
+      }
+      function textSize(a) {
+        actx.save();
+        actx.font = `${a.bold ? 700 : 400} ${a.fs}px "${a.font}", "Segoe UI", sans-serif`;
+        const lines = a.text.split('\n');
+        const w = Math.max(...lines.map((l) => actx.measureText(l).width));
+        actx.restore();
+        return { w, h: lines.length * a.fs * 1.2 };
+      }
+      function bbox(a) {
+        if (a.t === 'pen') {
+          const xs = a.pts.map((p) => p[0]), ys = a.pts.map((p) => p[1]);
+          const x = Math.min(...xs), y = Math.min(...ys);
+          return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+        }
+        if (a.t === 'text') { const s = textSize(a); return { x: a.x, y: a.y, w: s.w, h: s.h }; }
+        return norm(a);
+      }
+      function segDist(x, y, x1, y1, x2, y2) {
+        const dx = x2 - x1, dy = y2 - y1, l = dx * dx + dy * dy;
+        const t = l ? Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / l)) : 0;
+        return Math.hypot(x - x1 - t * dx, y - y1 - t * dy);
+      }
+      // Outlines are grabbed by their line, filled things (text, blur, pixelate) anywhere
+      function hit(a, x, y) {
+        const tol = Math.max(7, LINE[a.size] / 2 + 4);
+        if (a.t === 'rect') {
+          const r = norm(a);
+          const inOuter = x >= r.x - tol && x <= r.x + r.w + tol && y >= r.y - tol && y <= r.y + r.h + tol;
+          const inInner = x > r.x + tol && x < r.x + r.w - tol && y > r.y + tol && y < r.y + r.h - tol;
+          return inOuter && !inInner;
+        }
+        if (a.t === 'ellipse') {
+          const r = norm(a), rx = r.w / 2, ry = r.h / 2;
+          if (rx < tol || ry < tol) return x >= r.x - tol && x <= r.x + r.w + tol && y >= r.y - tol && y <= r.y + r.h + tol;
+          const d = Math.hypot((x - r.x - rx) / rx, (y - r.y - ry) / ry);
+          return Math.abs(d - 1) * Math.min(rx, ry) <= tol;
+        }
+        if (a.t === 'arrow' || a.t === 'line') return segDist(x, y, a.x1, a.y1, a.x2, a.y2) <= tol;
+        if (a.t === 'pen') {
+          const p = a.pts;
+          if (p.length === 1) return Math.hypot(x - p[0][0], y - p[0][1]) <= tol;
+          for (let i = 1; i < p.length; i++) if (segDist(x, y, p[i - 1][0], p[i - 1][1], p[i][0], p[i][1]) <= tol) return true;
+          return false;
+        }
+        const b = bbox(a);
+        return x >= b.x - 4 && x <= b.x + b.w + 4 && y >= b.y - 4 && y <= b.y + b.h + 4;
+      }
+      function objectAt(x, y) {
+        for (let i = anns.length - 1; i >= 0; i--) if (hit(anns[i], x, y)) return anns[i];
+        return null;
+      }
+
+      function select(a) {
+        selObj = a;
+        if (a) {                       // the toolbar shows the selected object's style
+          color = a.color.startsWith('rgb') ? rgbToHex(a.color) : a.color;
+          sizeIx = a.size ?? sizeIx;
+          if (a.t === 'text') { font = a.font; fsize = a.fs; bold = a.bold; }
+          paintToolbar();
+        }
+        paintSel();
+      }
+      function rgbToHex(s) {
+        const m = s.match(/\d+/g) || [0, 0, 0];
+        return '#' + m.slice(0, 3).map((n) => (+n).toString(16).padStart(2, '0')).join('');
+      }
+      function paintSel() {
+        const box = $('obox');
+        if (!selObj || tool === 'region' || !anns.includes(selObj)) { box.classList.remove('on'); box.innerHTML = ''; return; }
+        const b = bbox(selObj), pad = ['arrow', 'line', 'pen'].includes(selObj.t) ? 6 : 4;
+        const bx = b.x - pad, by = b.y - pad, bw = b.w + pad * 2, bh = b.h + pad * 2;
+        Object.assign(box.style, { left: bx + 'px', top: by + 'px', width: bw + 'px', height: bh + 'px' });
+        let hs;
+        if (selObj.t === 'arrow' || selObj.t === 'line') {
+          hs = [['p1', selObj.x1 - bx, selObj.y1 - by], ['p2', selObj.x2 - bx, selObj.y2 - by]];
+        } else {
+          hs = [['nw', 0, 0], ['ne', bw, 0], ['se', bw, bh], ['sw', 0, bh]];
+          if (selObj.t !== 'text') hs.push(['n', bw / 2, 0], ['e', bw, bh / 2], ['s', bw / 2, bh], ['w', 0, bh / 2]);
+        }
+        // Built via the DOM: the CSP (Tauri adds nonces) drops inline style="" from innerHTML
+        box.replaceChildren(...hs.map(([h, x, y]) => {
+          const i = document.createElement('i');
+          i.className = h[0] === 'p' ? 'h pt' : 'h';
+          i.dataset.h = h;
+          i.style.left = x + 'px';
+          i.style.top = y + 'px';
+          return i;
+        }));
+        box.classList.add('on');
+      }
+      // Toolbar style change → the selected drawing too (one undo step per burst)
+      function applyToSel(what) {
+        if (!selObj || textEd) return;
+        if (what === 'text' && selObj.t !== 'text') return;
+        const key = what + anns.indexOf(selObj), now = Date.now();
+        if (lastApply.key !== key || now - lastApply.t > 1200) remember();
+        lastApply = { key, t: now };
+        if (what === 'color') selObj.color = color;
+        if (what === 'size') selObj.size = sizeIx;
+        if (what === 'text') { selObj.font = font; selObj.fs = fsize; selObj.bold = bold; }
+        rebuild();
+        paintSel();
+      }
+
+      function startOp(kind, e, h) {
+        op = { kind, h, sx: e.clientX, sy: e.clientY, orig: clone(selObj), ob: bbox(selObj), moved: false };
+        document.body.classList.add('moving');
+      }
+      function moveOp(e) {
+        const dx = e.clientX - op.sx, dy = e.clientY - op.sy;
+        if (!op.moved) {
+          if (Math.hypot(dx, dy) < 2) return;
+          remember();
+          // remember() copied anns; keep editing the live object
+          op.moved = true;
+        }
+        const o = op.orig, a = selObj;
+        if (op.kind === 'move') {
+          if (a.t === 'pen') a.pts = o.pts.map((p) => [p[0] + dx, p[1] + dy]);
+          else if (a.t === 'text') { a.x = o.x + dx; a.y = o.y + dy; }
+          else { a.x1 = o.x1 + dx; a.y1 = o.y1 + dy; a.x2 = o.x2 + dx; a.y2 = o.y2 + dy; }
+        } else if (op.h === 'p1' || op.h === 'p2') {
+          const n = op.h[1];
+          a['x' + n] = o['x' + n] + dx; a['y' + n] = o['y' + n] + dy;
+        } else {
+          const ob = op.ob, h = op.h, MIN = 4;
+          let x = ob.x, y = ob.y, w = ob.w, hh = ob.h;
+          if (h.includes('w')) { x = Math.min(ob.x + dx, ob.x + ob.w - MIN); w = ob.x + ob.w - x; }
+          if (h.includes('e')) w = Math.max(MIN, ob.w + dx);
+          if (h.includes('n')) { y = Math.min(ob.y + dy, ob.y + ob.h - MIN); hh = ob.y + ob.h - y; }
+          if (h.includes('s')) hh = Math.max(MIN, ob.h + dy);
+          if (a.t === 'text') {         // text scales uniformly from the opposite corner
+            const s = Math.max(w / (ob.w || 1), hh / (ob.h || 1));
+            a.fs = Math.max(6, Math.min(400, o.fs * s));
+            const ns = textSize(a);
+            a.x = h.includes('w') ? ob.x + ob.w - ns.w : ob.x;
+            a.y = h.includes('n') ? ob.y + ob.h - ns.h : ob.y;
+            fsize = Math.round(a.fs);
+            paintToolbar();
+          } else {
+            const kx = ob.w ? w / ob.w : 1, ky = ob.h ? hh / ob.h : 1;
+            const mx = (v) => x + (v - ob.x) * kx, my = (v) => y + (v - ob.y) * ky;
+            if (a.t === 'pen') a.pts = o.pts.map((p) => [mx(p[0]), my(p[1])]);
+            else { a.x1 = mx(o.x1); a.y1 = my(o.y1); a.x2 = mx(o.x2); a.y2 = my(o.y2); }
+          }
+        }
+        rebuild();
+        paintSel();
+      }
+      function endOp() {
+        op = null;
+        document.body.classList.remove('moving');
+      }
+      function deleteSel() {
+        if (!selObj) return;
+        remember();
+        anns = anns.filter((a) => a !== selObj);
+        select(null);
+        rebuild();
+      }
+      function drawAnn(c, a) {
+        c.save();
+        c.setTransform(K, 0, 0, K, 0, 0);
+        const lw = LINE[a.size];
+        c.lineWidth = lw; c.strokeStyle = c.fillStyle = a.color; c.lineCap = 'round'; c.lineJoin = 'round';
+        if (a.t === 'rect') {
+          const r = norm(a); c.strokeRect(r.x, r.y, r.w, r.h);
+        } else if (a.t === 'ellipse') {
+          const r = norm(a);
+          c.beginPath(); c.ellipse(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, r.h / 2, 0, 0, Math.PI * 2); c.stroke();
+        } else if (a.t === 'pen') {
+          const p = a.pts;
+          c.beginPath(); c.moveTo(p[0][0], p[0][1]);
+          if (p.length === 1) c.lineTo(p[0][0] + 0.01, p[0][1]);
+          for (let i = 1; i < p.length - 1; i++) {
+            c.quadraticCurveTo(p[i][0], p[i][1], (p[i][0] + p[i + 1][0]) / 2, (p[i][1] + p[i + 1][1]) / 2);
+          }
+          if (p.length > 1) c.lineTo(p[p.length - 1][0], p[p.length - 1][1]);
+          c.stroke();
+        } else if (a.t === 'line') {
+          c.beginPath(); c.moveTo(a.x1, a.y1); c.lineTo(a.x2, a.y2); c.stroke();
+        } else if (a.t === 'arrow') {
+          const ang = Math.atan2(a.y2 - a.y1, a.x2 - a.x1);
+          const len = Math.min(10 + lw * 3, Math.hypot(a.x2 - a.x1, a.y2 - a.y1));
+          const bx = a.x2 - len * Math.cos(ang), by = a.y2 - len * Math.sin(ang);
+          c.beginPath(); c.moveTo(a.x1, a.y1); c.lineTo(bx + Math.cos(ang) * lw * 0.5, by + Math.sin(ang) * lw * 0.5); c.stroke();
+          const px = -Math.sin(ang) * len * 0.5, py = Math.cos(ang) * len * 0.5;
+          c.lineWidth = Math.max(1, lw * 0.4);
+          c.beginPath(); c.moveTo(a.x2, a.y2); c.lineTo(bx + px, by + py); c.lineTo(bx - px, by - py); c.closePath();
+          c.fill(); c.stroke();
+        } else if (a.t === 'text') {
+          const fs = a.fs;
+          c.font = `${a.bold ? 700 : 400} ${fs}px "${a.font}", "Segoe UI", sans-serif`;
+          // Same baseline as the CSS editor (line-height 1.2): the font's
+          // ascent + descent sit centred in each line box
+          c.textBaseline = 'alphabetic';
+          const m = c.measureText('Hg');
+          const A = m.fontBoundingBoxAscent, D = m.fontBoundingBoxDescent;
+          const base = (fs * 1.2 - (A + D)) / 2 + A;
+          c.shadowColor = 'rgba(0,0,0,0.55)'; c.shadowBlur = 3 * K; c.shadowOffsetY = 1 * K;
+          a.text.split('\n').forEach((ln, i) => c.fillText(ln, a.x, a.y + base + i * fs * 1.2));
+        } else if (a.t === 'blur' || a.t === 'pixel') {
+          const r = norm(a);
+          if (r.w >= 1 && r.h >= 1) {
+            c.beginPath(); c.rect(r.x, r.y, r.w, r.h); c.clip();
+            if (a.t === 'blur') {
+              const rad = BLUR[a.size], pad = rad * 2;
+              c.filter = `blur(${rad * K}px)`;
+              c.drawImage(shot, (r.x - pad) * K, (r.y - pad) * K, (r.w + 2 * pad) * K, (r.h + 2 * pad) * K,
+                r.x - pad, r.y - pad, r.w + 2 * pad, r.h + 2 * pad);
+            } else {
+              const blk = PIX[a.size];
+              const tw = Math.max(1, Math.round(r.w / blk)), th = Math.max(1, Math.round(r.h / blk));
+              const s = document.createElement('canvas');
+              s.width = tw; s.height = th;
+              const sc = s.getContext('2d');
+              sc.imageSmoothingQuality = 'high';
+              sc.drawImage(shot, r.x * K, r.y * K, r.w * K, r.h * K, 0, 0, tw, th);
+              c.imageSmoothingEnabled = false;
+              c.drawImage(s, 0, 0, tw, th, r.x, r.y, r.w, r.h);
+            }
+          }
+        }
+        c.restore();
+      }
+      function rebuild() {            // committed drawings → cache, then screen
+        cctx.clearRect(0, 0, cache.width, cache.height);
+        for (const a of anns) drawAnn(cctx, a);
+        render();
+      }
+      function render(extra) {
+        actx.clearRect(0, 0, ann.width, ann.height);
+        actx.drawImage(cache, 0, 0);
+        if (extra) drawAnn(actx, extra);
+      }
+      function sizeCanvases() {
+        K = shot.naturalWidth / window.innerWidth || dpr();
+        for (const c of [ann, cache]) { c.width = shot.naturalWidth; c.height = shot.naturalHeight; }
+      }
+
+      function beginDraw(e) {
+        const p = { x: e.clientX, y: e.clientY };
+        if (tool === 'text') { openText(p); return; }
+        cur = { t: tool, x1: p.x, y1: p.y, x2: p.x, y2: p.y, color, size: sizeIx };
+        if (tool === 'pen') cur.pts = [[p.x, p.y]];
+        drawingNow = true;
+        document.body.classList.add('drawing-now');
+        render(cur);
+      }
+      function moveDraw(e) {
+        let x = e.clientX, y = e.clientY;
+        if (cur.t === 'pen') {
+          const l = cur.pts[cur.pts.length - 1];
+          if (Math.hypot(x - l[0], y - l[1]) >= 1.5) cur.pts.push([x, y]);
+        } else if (e.shiftKey && (cur.t === 'arrow' || cur.t === 'line')) {
+          const ang = Math.round(Math.atan2(y - cur.y1, x - cur.x1) / (Math.PI / 4)) * (Math.PI / 4);
+          const d = Math.hypot(x - cur.x1, y - cur.y1);
+          x = cur.x1 + d * Math.cos(ang); y = cur.y1 + d * Math.sin(ang);
+        } else if (e.shiftKey) {        // square / circle
+          const d = Math.max(Math.abs(x - cur.x1), Math.abs(y - cur.y1));
+          x = cur.x1 + d * Math.sign(x - cur.x1 || 1); y = cur.y1 + d * Math.sign(y - cur.y1 || 1);
+        }
+        cur.x2 = x; cur.y2 = y;
+        render(cur);
+      }
+      function endDraw() {
+        drawingNow = false;
+        document.body.classList.remove('drawing-now');
+        const big = cur.t === 'pen' ? true : Math.hypot(cur.x2 - cur.x1, cur.y2 - cur.y1) >= 3;
+        const made = big ? cur : null;
+        if (made) { remember(); anns.push(made); }
+        cur = null;
+        rebuild();
+        select(made);                 // like ShareX: the new drawing is selected
+      }
+
+      // obj = an existing text being edited again (double-click)
+      function openText(p, obj) {
+        const ed = document.createElement('div');
+        ed.className = 'txt-edit';
+        ed.contentEditable = 'plaintext-only';
+        ed.style.left = p.x + 'px';
+        ed.style.top = (obj ? p.y : p.y - fsize * 0.6) + 'px';
+        if (obj) {
+          remember();
+          anns = anns.filter((a) => a !== obj);
+          ed.dataset.editing = '1';
+          font = obj.font; fsize = Math.round(obj.fs); bold = obj.bold;
+          color = obj.color.startsWith('rgb') ? rgbToHex(obj.color) : obj.color;
+          ed.textContent = obj.text;
+          select(null);
+          rebuild();
+          paintToolbar();
+        }
+        textEd = ed;
+        styleEditor();
+        if (obj) ed.style.fontSize = obj.fs + 'px', ed.dataset.fsize = obj.fs;
+        ed.addEventListener('keydown', (e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitText(); }
+          else if (e.key === 'Escape') { e.preventDefault(); cancelText(); }
+        });
+        ed.addEventListener('mousedown', (e) => e.stopPropagation());
+        ed.addEventListener('mouseup', (e) => e.stopPropagation());
+        document.body.appendChild(ed);
+        setTimeout(() => {
+          ed.focus();
+          if (obj) {                  // caret at the end of the existing text
+            const r = document.createRange();
+            r.selectNodeContents(ed); r.collapse(false);
+            const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+          }
+        }, 0);
+      }
+      function commitText() {
+        const ed = textEd;
+        if (!ed) return;
+        textEd = null;
+        const s = ed.innerText.replace(/\n+$/, '');
+        let made = null;
+        if (s.trim()) {
+          const r = ed.getBoundingClientRect();
+          made = { t: 'text', x: r.left, y: r.top, text: s, color: ed.style.color,
+            font: ed.dataset.font, fs: parseFloat(ed.dataset.fsize), bold: !!ed.dataset.bold, size: sizeIx };
+          if (!ed.dataset.editing) remember();     // re-edit: the removal was already remembered
+          anns.push(made);
+        }
+        ed.remove();
+        rebuild();
+        select(made);
+      }
+      function cancelText() {
+        if (!textEd) return;
+        const editing = textEd.dataset.editing;
+        textEd.remove();
+        textEd = null;
+        if (editing && past.length) { anns = past.pop(); rebuild(); }   // put the original back
+      }
+
+      // The finished selection with drawings → frame-pixel layer for the backend
+      function finishWithLayer(r) {
+        const W = ann.width, H = ann.height;
+        let x = 0, y = 0, w = W, h = H;
+        if (r) {
+          x = Math.min(Math.round(r.x * K), W - 1); y = Math.min(Math.round(r.y * K), H - 1);
+          w = Math.min(Math.round(r.w * K), W - x); h = Math.min(Math.round(r.h * K), H - y);
+        }
+        try {
+          const data = cctx.getImageData(x, y, w, h).data;
+          invoke('capture_finish_layer', new Uint8Array(data.buffer),
+            { headers: { x: String(x), y: String(y), w: String(w), h: String(h) } });
+          return true;
+        } catch (e) {
+          log('layer failed ' + e);
+          return false;
+        }
+      }
+
+      // This window lives for the whole session (created hidden at startup) and
+      // is reused for every capture — a fresh WebView2 flashes black when first
+      // shown. capture-begin → load the new frozen frame, then ask to be shown.
+      function begin(ev) {
+        log('begin');
+        done = false; start = null; dragging = false; hover = null; openedAt = Date.now();
+        wins = [];
+        invoke('capture_windows').then((list) => {
+          const k = dpr();
+          wins = (list || []).map((w) => ({
+            x: w.x / k, y: w.y / k, w: w.w / k, h: w.h / k, title: w.title,
+            children: (w.children || []).map((c) => ({ x: c.x / k, y: c.y / k, w: c.w / k, h: c.h / k, title: w.title, elem: true })),
+          }));
+        }).catch(() => {});
+        cancelText(); anns = []; past = []; cur = null; drawingNow = false; op = null; select(null);
+        tool = 'region';
+        document.body.classList.toggle('has-tools', toolsEnabled());
+        rec = loadRec();                  // Settings may have changed it
+        setMode(ev && ev.payload === 'video' ? 'video' : 'image');
+        shot.onload = () => {
+          log('frame loaded');
+          sizeCanvases();
+          rebuild();
+          if (toolsEnabled()) setTimeout(loadFonts, 400);   // font list ready before it's opened
+          document.body.classList.add('ready');
+          const hint = $('hint');           // replay the hint's entrance
+          hint.style.animation = 'none'; void hint.offsetWidth; hint.style.animation = '';
+          requestAnimationFrame(() => invoke('capture_ready'));
+          window.focus();
+        };
+        shot.src = convertFileSrc('frame.bmp', 'nshot') + '?t=' + Date.now();
+      }
+      // capture-reset → clear everything BEFORE the window is hidden, so the next
+      // show can't flash this frame; then let the backend hide us.
+      function reset() {
+        log('reset');
+        done = true; start = null; dragging = false;
+        document.body.classList.remove('ready', 'dragging', 'drawing-now');
+        cancelText(); anns = []; past = []; cur = null; drawingNow = false; op = null; closePops();
+        selObj = null; paintSel();
+        document.body.classList.remove('moving', 'over-obj');
+        if (picking) $('eyedrop').click();
+        actx.clearRect(0, 0, ann.width, ann.height);
+        cctx.clearRect(0, 0, cache.width, cache.height);
+        dim.classList.remove('hidden');
+        [sel, size, winBox, winLabel].forEach((el) => { el.style.display = 'none'; });
+        hover = null;
+        shot.onload = null;
+        shot.removeAttribute('src');
+        requestAnimationFrame(() => requestAnimationFrame(() => invoke('capture_hide')));
+      }
+      window.__TAURI__.event.listen('capture-begin', begin);
+      window.__TAURI__.event.listen('capture-reset', reset);
+
+      const inside = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+      // Topmost window containing the point (the list is in z-order), then the
+      // smallest child element of it under the cursor (menu bar, video area,
+      // panes…) — like ShareX. No element → the whole window.
+      // A band along the window's edge picks the whole window — child panes
+      // often fill it up to the very border, which left a ~1 px target.
+      // Holding Ctrl always picks the whole window.
+      const WIN_EDGE = 16;      // CSS px
+      let wholeWindow = false;
+      function windowAt(x, y) {
+        const w = wins.find((w) => inside(w, x, y));
+        if (!w) return null;
+        if (wholeWindow) return w;
+        const edge = Math.min(WIN_EDGE, w.w / 6, w.h / 6);
+        if (x < w.x + edge || x >= w.x + w.w - edge || y < w.y + edge || y >= w.y + w.h - edge) return w;
+        let best = null;
+        for (const c of w.children) {
+          if (inside(c, x, y) && (!best || c.w * c.h < best.w * best.h)) best = c;
+        }
+        return best || w;
+      }
+      // Ctrl pressed / released while hovering → re-pick under the cursor
+      let lastMouse = null;
+      const repick = (e) => {
+        if (wholeWindow === e.ctrlKey) return;
+        wholeWindow = e.ctrlKey;
+        if (!done && !start && lastMouse && tool === 'region') {
+          const w = windowAt(lastMouse.x, lastMouse.y);
+          if (w !== hover) showHover(w);
+        }
+      };
+      window.addEventListener('keydown', repick);
+      window.addEventListener('keyup', repick);
+
+      // Snap a point to nearby window / screen edges (only edges whose span
+      // the point is actually next to, so far-away windows don't pull it).
+      function snap(px, py, free) {
+        if (free) return { x: px, y: py };   // Alt held = no snapping
+        let x = px, y = py, bx = SNAP + 1, by = SNAP + 1;
+        const tryX = (edge) => { const d = Math.abs(px - edge); if (d < bx) { bx = d; x = edge; } };
+        const tryY = (edge) => { const d = Math.abs(py - edge); if (d < by) { by = d; y = edge; } };
+        tryX(0); tryX(window.innerWidth); tryY(0); tryY(window.innerHeight);
+        for (const w of wins) {
+          for (const r of [w, ...w.children]) {
+            if (py >= r.y - SNAP && py <= r.y + r.h + SNAP) { tryX(r.x); tryX(r.x + r.w); }
+            if (px >= r.x - SNAP && px <= r.x + r.w + SNAP) { tryY(r.y); tryY(r.y + r.h); }
+          }
+        }
+        return { x, y };
+      }
+      function rectFrom(p) {
+        const x = Math.min(start.x, p.x), y = Math.min(start.y, p.y);
+        return { x, y, w: Math.abs(p.x - start.x), h: Math.abs(p.y - start.y) };
+      }
+      function showSize(r) {
+        size.style.display = 'block';
+        size.textContent = `${Math.round(r.w * dpr())} × ${Math.round(r.h * dpr())}`;
+        const ly = r.y > 30 ? r.y - 26 : r.y + 6;
+        size.style.left = Math.max(4, Math.min(r.x, window.innerWidth - size.offsetWidth - 6)) + 'px';
+        size.style.top = ly + 'px';
+      }
+      function showHover(w) {
+        hover = w;
+        if (!w) {
+          winBox.style.display = 'none';
+          winLabel.style.display = 'none';
+          size.style.display = 'none';
+          return;
+        }
+        Object.assign(winBox.style, { display: 'block', left: w.x + 'px', top: w.y + 'px', width: w.w + 'px', height: w.h + 'px' });
+        winBox.classList.toggle('elem', !!w.elem);
+        winLabel.innerHTML = '';
+        winLabel.append(w.title || 'Window');
+        const dims = document.createElement('b');
+        dims.textContent = `${Math.round(w.w * dpr())} × ${Math.round(w.h * dpr())}`;
+        winLabel.append(dims);
+        winLabel.style.display = 'block';
+        const ly = w.y > 30 ? w.y - 28 : w.y + 8;
+        winLabel.style.left = Math.max(4, Math.min(w.x, window.innerWidth - winLabel.offsetWidth - 6)) + 'px';
+        winLabel.style.top = ly + 'px';
+      }
+      function finish(r) {
+        if (done) return;
+        done = true;
+        if (textEd) commitText();
+        const k = dpr();
+        const sel = r && r.w * k >= 4 && r.h * k >= 4 ? r : null;
+        if (mode === 'video') {           // hand the region over to the recorder
+          const big = r && r.w * k >= 16 && r.h * k >= 16;
+          const args = big
+            ? { x: Math.round(r.x * k), y: Math.round(r.y * k), w: Math.round(r.w * k), h: Math.round(r.h * k) }
+            : {};
+          invoke('record_start', { ...args, opts: rec }).catch((e) => { log('record_start ' + e); invoke('capture_cancel'); });
+          return;
+        }
+        if (anns.length && finishWithLayer(sel)) return;
+        if (sel) {
+          invoke('capture_finish', { x: Math.round(r.x * k), y: Math.round(r.y * k), w: Math.round(r.w * k), h: Math.round(r.h * k) });
+        } else {
+          invoke('capture_finish', {});   // whole screen
+        }
+      }
+      function cancel(why) {
+        log('cancel ' + (why || ''));
+        if (done) return;
+        done = true;
+        invoke('capture_cancel');
+      }
+
+      window.addEventListener('mousemove', (e) => {
+        gx.style.top = e.clientY + 'px';
+        gy.style.left = e.clientX + 'px';
+        if (done) return;
+        if (op) { moveOp(e); return; }
+        if (drawingNow) { moveDraw(e); return; }
+        if (tool !== 'region') {      // drawings under the cursor can be grabbed
+          const onHandle = e.target.closest && e.target.closest('#obox .h');
+          document.body.classList.toggle('over-obj', !onHandle && !textEd && !!objectAt(e.clientX, e.clientY));
+          return;
+        }
+        lastMouse = { x: e.clientX, y: e.clientY };
+        wholeWindow = e.ctrlKey;
+        if (!start) {
+          const w = windowAt(e.clientX, e.clientY);
+          if (w !== hover) showHover(w);
+          return;
+        }
+        if (!dragging && Math.hypot(e.clientX - start.raw.x, e.clientY - start.raw.y) < DRAG_MIN) return;
+        if (!dragging) {
+          dragging = true;
+          document.body.classList.add('dragging');
+          dim.classList.add('hidden');
+        }
+        const r = rectFrom(snap(e.clientX, e.clientY, e.altKey));
+        Object.assign(sel.style, { display: 'block', left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' });
+        showSize(r);
+      });
+      window.addEventListener('mousedown', (e) => {
+        if (done) return;
+        if (e.button === 2) { cancel(); return; }
+        if (e.button !== 0) return;
+        if (picking) { pickAt(e.clientX, e.clientY); return; }
+        closePops();                              // an open colour / font popup never blocks drawing
+        if (textEd) { commitText(); return; }     // a click outside places the text
+        if (tool !== 'region') {
+          const h = e.target.closest && e.target.closest('#obox .h');
+          if (h && selObj) { startOp('resize', e, h.dataset.h); return; }
+          const o = objectAt(e.clientX, e.clientY);
+          if (o) { select(o); startOp('move', e); return; }
+          select(null);
+          beginDraw(e);
+          return;
+        }
+        const p = snap(e.clientX, e.clientY, e.altKey);
+        start = { x: p.x, y: p.y, raw: { x: e.clientX, y: e.clientY } };
+      });
+      window.addEventListener('mouseup', (e) => {
+        if (done || e.button !== 0) return;
+        if (op) { endOp(); return; }
+        if (drawingNow) { endDraw(); return; }
+        if (!start) return;
+        if (dragging) {
+          finish(rectFrom(snap(e.clientX, e.clientY, e.altKey)));
+        } else {
+          // Plain click: the highlighted window, or the whole screen
+          finish(hover ? { x: hover.x, y: hover.y, w: hover.w, h: hover.h } : null);
+        }
+      });
+      window.addEventListener('contextmenu', (e) => e.preventDefault());
+      // Double-click a text → edit it again
+      window.addEventListener('dblclick', (e) => {
+        if (done || tool === 'region' || textEd) return;
+        const o = objectAt(e.clientX, e.clientY);
+        if (o && o.t === 'text') { endOp(); openText({ x: o.x, y: o.y }, o); }
+      });
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && (picking || document.querySelector('.pop.open'))) {
+          if (picking) $('eyedrop').click(); else closePops();
+          return;
+        }
+        if (e.key === 'Escape' && selObj) { select(null); return; }     // first Esc only deselects
+        if (e.key === 'Escape') cancel('esc');
+        if (e.key === 'Enter' && !start) finish(null);
+        if (done || mode === 'video' || !document.body.classList.contains('has-tools')) return;
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selObj) { e.preventDefault(); deleteSel(); return; }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+        const n = parseInt(e.key, 10);
+        if (!e.ctrlKey && !e.altKey && n >= 1 && n <= TOOL_KEYS.length && !start && !drawingNow) setTool(TOOL_KEYS[n - 1]);
+      });
+      // Clicking away to another window cancels (so the overlay can't get stuck)
+      // (ignored right after opening, while focus is still settling)
+      window.addEventListener('blur', () => setTimeout(() => {
+        if (!done && !document.hasFocus() && Date.now() - openedAt > 600) cancel('blur');
+      }, 150));
+    </script>
+  </body>
+</html>

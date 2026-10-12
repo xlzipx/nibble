@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Nibble screenshot</title>
+    <style>
+      :root {
+        --accent: #ff3b5c;
+        --grad: linear-gradient(135deg, #ff7a3d 0%, #ff3355 55%, #ff1f6b 100%);
+        --text: #eceef3;
+        --dim: #8b909c;
+        --line: #2a2e38;
+        --ease-spring: cubic-bezier(0.34, 1.45, 0.64, 1);
+        --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body {
+        width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none;
+        font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif; color: var(--text);
+      }
+      /* Card drops in from above the screen edge */
+      .card {
+        position: absolute; left: 14px; right: 14px; top: 12px;
+        display: flex; align-items: center; gap: 14px;
+        padding: 10px 12px 14px 10px;
+        background: linear-gradient(180deg, rgba(23, 25, 32, 0.97), rgba(15, 17, 22, 0.97));
+        border: 1px solid var(--line); border-radius: 16px;
+        box-shadow: 0 16px 38px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 59, 92, 0.06);
+        cursor: pointer; overflow: hidden;
+        transform: translateY(-140%) scale(0.96); opacity: 0;
+      }
+      .card.in  { animation: drop-in 560ms var(--ease-spring) forwards; }
+      .card.out { animation: lift-out 320ms var(--ease-out) forwards; }
+      @keyframes drop-in  { from { transform: translateY(-140%) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+      @keyframes lift-out { from { transform: none; opacity: 1; } to { transform: translateY(-140%) scale(0.97); opacity: 0; } }
+      /* Gradient hairline + glow */
+      .card::before {
+        content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1px; pointer-events: none;
+        background: linear-gradient(120deg, rgba(255, 122, 61, 0.8), rgba(255, 51, 85, 0.3) 35%, transparent 60%);
+        -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor; mask-composite: exclude;
+      }
+      .glow {
+        position: absolute; left: -40px; top: -60px; width: 220px; height: 160px; pointer-events: none;
+        background: radial-gradient(closest-side, rgba(255, 59, 92, 0.22), transparent); filter: blur(8px);
+      }
+      .card:hover { border-color: rgba(255, 59, 92, 0.45); }
+
+      .thumb {
+        position: relative; flex-shrink: 0; width: 118px; height: 74px; border-radius: 10px; overflow: hidden;
+        background: #0b0c10; border: 1px solid var(--line);
+        display: grid; place-items: center;
+      }
+      .thumb img { max-width: 100%; max-height: 100%; display: block; transform: scale(1.08); transition: transform 600ms var(--ease-out); }
+      .card.in .thumb img { transform: none; }
+      .card:hover .thumb img { transform: scale(1.04); }
+      /* Shutter flash over the thumbnail on arrival */
+      .thumb::after {
+        content: ""; position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none;
+      }
+      .card.in .thumb::after { animation: flash 520ms ease-out 120ms; }
+      @keyframes flash { 0% { opacity: 0.85; } 100% { opacity: 0; } }
+
+      /* Play badge on video thumbnails */
+      .play {
+        position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%;
+        background: rgba(10, 11, 15, 0.7); border: 1.5px solid rgba(255, 255, 255, 0.7); z-index: 1;
+      }
+      .play::after {
+        content: ""; position: absolute; left: 11px; top: 8px;
+        border-style: solid; border-width: 6px 0 6px 10px; border-color: transparent transparent transparent #fff;
+      }
+      .text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+      .kicker {
+        display: flex; align-items: center; gap: 7px;
+        font: 600 10px 'Cascadia Mono', Consolas, monospace; letter-spacing: 1.6px; text-transform: uppercase; color: #ff7a8f;
+      }
+      .kicker .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--grad); box-shadow: 0 0 10px var(--accent); }
+      .title { font-size: 14.5px; font-weight: 600; }
+      .sub { font-size: 12px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .sub b { font: 500 11px 'Cascadia Mono', Consolas, monospace; color: #c9ccd4; }
+      .hint { font-size: 11px; color: #5a5f6b; }
+
+      .actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; align-self: stretch; justify-content: center; }
+      .ibtn {
+        width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px;
+        background: #181b22; border: 1px solid var(--line); color: var(--dim); cursor: pointer;
+        transition: color 140ms, border-color 140ms, background 140ms;
+      }
+      .ibtn:hover { color: var(--text); border-color: rgba(255, 59, 92, 0.5); background: rgba(255, 59, 92, 0.1); }
+      .ibtn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+      .hidden { display: none !important; }
+
+      /* Time left until it hides itself (pauses on hover) */
+      .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255, 255, 255, 0.05); }
+      .bar i { display: block; height: 100%; width: 100%; background: var(--grad); transform-origin: left; animation: countdown var(--ttl, 6s) linear forwards; }
+      .card:hover .bar i { animation-play-state: paused; }
+      @keyframes countdown { to { transform: scaleX(0); } }
+
+      /* "Making the GIF…" while a recording is being finished */
+      .wait { position: absolute; inset: 0; display: none; place-items: center; background: #0b0c10; }
+      .wait i { width: 26px; height: 26px; border-radius: 50%; border: 3px solid #2a2e38; border-top-color: var(--accent); animation: spin 0.8s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .card.saving .wait { display: grid; }
+      .card.saving { cursor: default; }
+      .card.saving .bar, .card.saving #folder { display: none; }
+      .card.saving .thumb::after { animation: none; }
+
+      @media (prefers-reduced-motion: reduce) {
+        .card.in, .card.out { animation-duration: 1ms; }
+        .card.in .thumb::after { animation: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card" id="card" title="Open">
+      <div class="glow"></div>
+      <div class="thumb"><img id="thumb" alt="" draggable="false" /><span class="play hidden" id="play"></span><span class="wait"><i></i></span></div>
+      <div class="text">
+        <div class="kicker"><span class="dot"></span><span id="kicker">Screenshot</span></div>
+        <div class="title" id="title">Copied to clipboard</div>
+        <div class="sub" id="sub">—</div>
+        <div class="hint" id="hint">Click to open</div>
+      </div>
+      <div class="actions">
+        <button class="ibtn hidden" id="folder" title="Show in folder">
+          <svg viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2z"/></svg>
+        </button>
+        <button class="ibtn" id="close" title="Close">
+          <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="bar"><i id="bar"></i></div>
+    </div>
+
+    <script>
+      const { invoke, convertFileSrc } = window.__TAURI__.core;
+      const card = document.getElementById('card');
+      const barWrap = card.querySelector('.bar');
+      const TTL = 6000;
+      let closing = false;
+
+      function close(after) {
+        if (closing) return;
+        closing = true;
+        card.classList.remove('in');
+        card.classList.add('out');
+        setTimeout(() => (after ? after() : invoke('shot_popup_close')), 300);
+      }
+
+      // The window is reused for every screenshot (created hidden at startup):
+      // shotpop-show → fill in the new shot, then ask to be shown.
+      // A recording is still being finished (GIF): spinner card, no countdown
+      function showSaving(ev) {
+        closing = false;
+        const wasIn = card.classList.contains('in');
+        card.classList.remove('out');
+        card.classList.add('saving');
+        document.getElementById('kicker').textContent = ev && ev.payload === 'gif' ? 'GIF' : 'Recording';
+        document.getElementById('title').textContent = ev && ev.payload === 'gif' ? 'Making the GIF…' : 'Saving the video…';
+        document.getElementById('sub').textContent = 'Just a moment';
+        document.getElementById('hint').textContent = 'It pops up here when ready';
+        document.getElementById('play').classList.add('hidden');
+        document.getElementById('thumb').removeAttribute('src');
+        invoke('shot_popup_ready');
+        if (!wasIn) requestAnimationFrame(() => requestAnimationFrame(() => card.classList.add('in')));
+      }
+      window.__TAURI__.event.listen('shotpop-saving', showSaving);
+
+      async function show() {
+        closing = false;
+        // Coming from the "saving" card: swap the content without re-dropping
+        const fromSaving = card.classList.contains('saving') && card.classList.contains('in');
+        card.classList.remove('saving');
+        if (!fromSaving) card.classList.remove('in', 'out');
+        const info = await invoke('shot_popup_info');
+        if (!info) { invoke('shot_popup_close'); return; }
+        const isVid = info.kind === 'video' || info.kind === 'gif';
+        document.getElementById('kicker').textContent = info.kind === 'gif' ? 'GIF' : info.kind === 'video' ? 'Recording' : 'Screenshot';
+        document.getElementById('title').textContent = isVid
+          ? (info.copied ? 'Saved & copied' : 'Saved')
+          : info.copied && info.saved ? 'Copied & saved' : info.saved ? 'Saved' : 'Copied to clipboard';
+        const sub = document.getElementById('sub');
+        sub.textContent = info.saved ? info.name + '  ' : 'Ready for Ctrl+V  ';
+        const dims = document.createElement('b');
+        const len = `${Math.floor(info.secs / 60)}:${String(Math.round(info.secs % 60)).padStart(2, '0')}`;
+        dims.textContent = isVid
+          ? `${len} · ${info.size_mb >= 10 ? Math.round(info.size_mb) : info.size_mb.toFixed(1)} MB`
+          : `${info.width} × ${info.height}`;
+        sub.append(dims);
+        document.getElementById('hint').textContent = isVid ? 'Click to play' : 'Click to open';
+        document.getElementById('play').classList.toggle('hidden', !isVid);
+        document.getElementById('folder').classList.toggle('hidden', !info.saved);
+        // Restart the countdown bar
+        barWrap.innerHTML = '<i id="bar"></i>';
+        const bar = document.getElementById('bar');
+        bar.style.setProperty('--ttl', TTL + 'ms');
+        bar.addEventListener('animationend', () => close());
+
+        const img = document.getElementById('thumb');
+        const go = () => {
+          invoke('shot_popup_ready');
+          requestAnimationFrame(() => requestAnimationFrame(() => card.classList.add('in')));
+        };
+        img.onload = go;
+        img.onerror = go;
+        img.src = convertFileSrc('thumb.png', 'nshot') + '?t=' + Date.now();
+      }
+      window.__TAURI__.event.listen('shotpop-show', show);
+
+      card.addEventListener('click', () => { if (!card.classList.contains('saving')) close(() => invoke('shot_open')); });
+      document.getElementById('close').addEventListener('click', (e) => { e.stopPropagation(); close(); });
+      document.getElementById('folder').addEventListener('click', (e) => { e.stopPropagation(); close(() => invoke('shot_reveal')); });
+    </script>
+  </body>
+</html>
