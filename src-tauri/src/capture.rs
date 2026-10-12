@@ -82,7 +82,8 @@ pub(crate) fn app_at(windows: &[WinRect], x: u32, y: u32, w: u32, h: u32) -> Opt
     let (cx, cy) = ((x + w / 2) as i32, (y + h / 2) as i32);
     windows.iter()
         .find(|r| cx >= r.x && cx < r.x + r.w && cy >= r.y && cy < r.y + r.h)
-        .map(|r| r.app.clone())
+        // Nibble's own exe may be "nibble-portable-v1.0.0" → just "nibble"
+        .map(|r| if r.app.starts_with("nibble") { "nibble".to_string() } else { r.app.clone() })
         .filter(|a| !a.is_empty())
 }
 
