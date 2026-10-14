@@ -3759,6 +3759,7 @@ pub fn run() {
             capture::capture_finish,
             capture::capture_finish_layer,
             capture::system_fonts,
+            capture::list_captures,
             record::record_start,
             record::record_stop,
             record::record_cancel,

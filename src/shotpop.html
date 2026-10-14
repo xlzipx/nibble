@@ -20,12 +20,13 @@
       }
       /* Card drops in from above the screen edge */
       .card {
-        position: absolute; left: 14px; right: 14px; top: 12px;
+        /* margins leave room for the whole shadow — the window edge would cut it */
+        position: absolute; left: 30px; right: 30px; top: 10px;
         display: flex; align-items: center; gap: 14px;
         padding: 10px 12px 14px 10px;
         background: linear-gradient(180deg, rgba(23, 25, 32, 0.97), rgba(15, 17, 22, 0.97));
         border: 1px solid var(--line); border-radius: 16px;
-        box-shadow: 0 16px 38px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 59, 92, 0.06);
+        box-shadow: 0 12px 26px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 59, 92, 0.06);
         cursor: pointer; overflow: hidden;
         transform: translateY(-140%) scale(0.96); opacity: 0;
       }

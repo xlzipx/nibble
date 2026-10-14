@@ -518,7 +518,7 @@ kbd {
 .start-tile:hover .st-ic { filter: drop-shadow(0 8px 20px rgba(255, 45, 85, 0.38)); }
 .start-tile:hover .st-ic { transform: scale(1.1); }
 .st-title { font-size: 15px; font-weight: 500; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.st-sub { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-dim); text-wrap: balance; }
+.st-sub { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-dim); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Drop target: highlight while a file is dragged over the window */
 #welcome-drop.dragover { background: var(--accent-bg); border-color: rgba(255, 59, 92, 0.75); border-style: dashed; }
 #welcome-drop.dragover .st-ic { animation: drop-bounce .8s ease-in-out infinite; }
@@ -538,6 +538,8 @@ kbd {
   border: 1px solid rgba(255, 255, 255, 0.045);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   border-radius: 16px;
+  /* bottom edge lines up with the last line of the System block (main.js) */
+  margin-bottom: var(--ra-gap, 0px);
 }
 .ra-head { margin: 0 8px 8px 0; }
 .ra-head .icon-btn { margin-left: auto; }
@@ -799,7 +801,79 @@ kbd {
 .view-picker,
 .view-download,
 .view-settings,
+.view-captures,
 .view-converting { flex-direction: column; gap: 16px; }
+
+/* ---- Captures browser ---- */
+.cap-filter { margin-left: auto; }
+.cap-filter button span { opacity: 0.6; margin-left: 3px; }
+.cap-filter button span:empty { display: none; }
+.cap-views button { display: grid; place-items: center; padding: 5px 8px; }
+.cap-views .ic { width: 15px; height: 15px; }
+.cap-body { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 2px 6px 4px 2px;
+  scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+.cap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+.cap-card {
+  display: flex; flex-direction: column; min-width: 0; cursor: pointer;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+  transition: transform .22s var(--ease-out), border-color .2s, box-shadow .22s, opacity .2s;
+  animation: rise-in .45s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 25ms);
+}
+.cap-card:hover { transform: translateY(-3px); border-color: var(--accent-line); box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35); }
+.cap-card.removing { opacity: 0; transform: scale(0.96); }
+.cap-media { position: relative; aspect-ratio: 16 / 10; background: #08090c; overflow: hidden; }
+.cap-media img, .cap-media video { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* Type badge — red, always visible: camera = screenshot, camcorder = video, GIF */
+.cap-badge {
+  position: absolute; left: 8px; top: 8px; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px 0 7px;
+  border-radius: 7px; background: var(--grad); color: #fff; font: 700 10.5px var(--font-mono); letter-spacing: 0.6px;
+  box-shadow: 0 3px 10px rgba(255, 40, 80, 0.35), 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.cap-badge .ic { width: 14px; height: 14px; stroke-width: 2.2; }
+.cap-badge.image { background: rgba(14, 15, 20, 0.86); color: #ffd0d8; border: 1px solid var(--accent-line); backdrop-filter: blur(4px); }
+.cap-badge.image .ic { color: var(--accent); }
+
+/* View modes */
+.cap-grid[data-view="large"] { grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 18px; }
+.cap-grid[data-view="small"] { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.cap-grid[data-view="small"] .cap-info { padding: 7px 9px 8px; }
+.cap-grid[data-view="small"] .cap-name { font-size: 12px; }
+.cap-grid[data-view="small"] .cap-meta { display: none; }
+.cap-grid[data-view="small"] .cap-badge b { display: none; }
+.cap-grid[data-view="small"] .cap-badge { padding: 0 5px; height: 22px; }
+.cap-grid[data-view="small"] .cap-act { width: 26px; height: 26px; }
+.cap-grid[data-view="list"] { grid-template-columns: 1fr; gap: 8px; }
+.cap-grid[data-view="list"] .cap-card { flex-direction: row; align-items: center; position: relative; border-radius: 12px; }
+.cap-grid[data-view="list"] .cap-card:hover { transform: none; background: var(--card-2, #15171d); }
+/* media goes static so the badge + actions anchor to the whole row */
+.cap-grid[data-view="list"] .cap-media { position: static; width: 132px; flex-shrink: 0; }
+.cap-grid[data-view="list"] .cap-badge { left: 6px; top: 6px; height: 20px; padding: 0 6px 0 5px; font-size: 9.5px; }
+.cap-grid[data-view="list"] .cap-badge .ic { width: 12px; height: 12px; }
+.cap-grid[data-view="list"] .cap-info { padding: 10px 160px 10px 16px; flex: 1 1 auto; gap: 5px; }
+.cap-grid[data-view="list"] .cap-name { font-size: 13.5px; }
+.cap-grid[data-view="list"] .cap-acts { top: 50%; right: 12px; transform: translateY(-50%); opacity: 0.55; }
+.cap-grid[data-view="list"] .cap-card:hover .cap-acts { opacity: 1; transform: translateY(-50%); }
+.cap-acts {
+  position: absolute; right: 8px; top: 8px; display: flex; gap: 4px;
+  opacity: 0; transform: translateY(-4px); transition: opacity .16s, transform .2s var(--ease-out);
+}
+.cap-card:hover .cap-acts, .cap-card:focus-within .cap-acts { opacity: 1; transform: none; }
+.cap-act {
+  width: 30px; height: 30px; display: grid; place-items: center; cursor: pointer;
+  background: rgba(14, 15, 20, 0.86); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; color: #dfe1e7;
+  backdrop-filter: blur(4px);
+}
+.cap-act .ic { width: 14px; height: 14px; }
+.cap-act:hover { color: #fff; border-color: var(--accent-line); background: rgba(40, 14, 22, 0.92); }
+.cap-act.danger:hover { color: var(--red); border-color: var(--red-line); }
+.cap-act.done { color: var(--green); border-color: var(--green-line); }
+.cap-info { padding: 10px 12px 11px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cap-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cap-meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cap-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 80px 20px; text-align: center; color: var(--text-dim); }
+.cap-empty .ic { width: 34px; height: 34px; color: var(--accent); margin-bottom: 6px; }
+.cap-empty-title { font-size: 16px; font-weight: 600; color: var(--text); }
+.cap-empty-sub { font-size: 13px; }
 .picker-top { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
 .picker-title { font-size: 20px; font-weight: 600; letter-spacing: -0.2px; }
 

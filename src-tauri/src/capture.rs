@@ -718,7 +718,7 @@ fn popup_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
         .shadow(false)
         .focused(false)
         .visible(false)
-        .inner_size(440.0, 128.0);
+        .inner_size(472.0, 160.0);
     if let Some(root) = crate::portable_root() {
         b = b.data_directory(root.join("WebView2"));
     }
@@ -746,7 +746,7 @@ pub fn prepare_popup(app: &AppHandle) {
 /// Top centre of the monitor the shot was taken on.
 fn place_popup(app: &AppHandle, mon: (i32, i32, u32, u32)) -> bool {
     let Some(win) = popup_window(app) else { return false };
-    let _ = win.set_size(tauri::LogicalSize::new(440.0, 128.0));
+    let _ = win.set_size(tauri::LogicalSize::new(472.0, 160.0));
     let size = win.outer_size().unwrap_or(tauri::PhysicalSize::new(550, 160));
     let x = mon.0 + (mon.2 as i32 - size.width as i32) / 2;
     let _ = win.set_position(tauri::PhysicalPosition::new(x, mon.1));
@@ -864,6 +864,63 @@ pub fn system_fonts() -> Vec<String> {
 #[tauri::command]
 pub fn system_fonts() -> Vec<String> {
     Vec::new()
+}
+
+#[derive(Serialize)]
+pub struct CaptureFile {
+    path: String,
+    name: String,
+    size: u64,
+    /// modified, ms since epoch
+    mtime: u64,
+    /// "image" | "video" | "gif"
+    kind: &'static str,
+    /// copy-only screenshot (temp copy, deleted after a day)
+    clipboard: bool,
+}
+
+/// Captures browser: screenshots and recordings in Nibble's folders (the
+/// chosen ones or the defaults) plus the temp copies of clipboard shots,
+/// newest first.
+#[tauri::command(async)]
+pub fn list_captures(shot_dir: String, rec_dir: String) -> Vec<CaptureFile> {
+    let home = std::env::var("USERPROFILE").map(PathBuf::from).unwrap_or_else(|_| std::env::temp_dir());
+    let pick = |s: &str, def: PathBuf| if s.trim().is_empty() { def } else { PathBuf::from(s.trim()) };
+    let dirs = [
+        (pick(&shot_dir, default_dir()), false),
+        (pick(&rec_dir, home.join("Videos").join("Nibble")), false),
+        (std::env::temp_dir().join("Nibble Screens"), true),
+    ];
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for (dir, clipboard) in dirs {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        for e in rd.flatten() {
+            let p = e.path();
+            let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            if name.starts_with("~nibble-rec-") {
+                continue; // a recording in progress
+            }
+            let ext = p.extension().map(|x| x.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+            let kind = match ext.as_str() {
+                "png" | "jpg" | "jpeg" | "webp" | "bmp" => "image",
+                "gif" => "gif",
+                "mp4" | "mkv" | "webm" | "mov" => "video",
+                _ => continue,
+            };
+            let Ok(meta) = e.metadata() else { continue };
+            if !meta.is_file() || !seen.insert(p.clone()) {
+                continue;
+            }
+            let mtime = meta.modified().ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as u64).unwrap_or(0);
+            out.push(CaptureFile { path: p.to_string_lossy().into_owned(), name, size: meta.len(), mtime, kind, clipboard });
+        }
+    }
+    out.sort_by(|a, b| b.mtime.cmp(&a.mtime));
+    out.truncate(600);
+    out
 }
 
 /// Overlay with drawings: raw RGBA of the annotation layer for the selected

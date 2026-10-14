@@ -82,6 +82,8 @@ pub fn busy() -> bool {
 
 #[derive(Clone)]
 struct Session {
+    /// Display scale of the recorded monitor (the pointer is drawn that big)
+    scale: f64,
     /// App under the recorded region ("vlc") — goes into the file name
     app: Option<String>,
     opts: RecOpts,
@@ -152,6 +154,7 @@ pub fn record_start(app: AppHandle, x: Option<u32>, y: Option<u32>, w: Option<u3
         rel: (rx, ry, rw, rh),
         bar_abs: (bx, by, bw as u32, bh as u32),
         app: crate::capture::app_at(&windows, rx, ry, rw, rh),
+        scale,
     };
     STOP.store(false, Ordering::SeqCst);
     CANCEL.store(false, Ordering::SeqCst);
@@ -336,17 +339,16 @@ fn run(app: AppHandle, s: Session) {
     let vid = dir.join(format!("~nibble-rec-{}.mkv", stamp));
     let wav = dir.join(format!("~nibble-rec-{}.wav", stamp));
 
-    // Audio first, so it covers the very first video frame
-    let audio = if kind == "gif" {
-        None
-    } else {
-        match s.opts.audio.as_str() {
-            "system" => AudioRec::start(true, wav.clone()),
-            "mic" => AudioRec::start(false, wav.clone()),
-            _ => None,
-        }
-    };
-    let audio_missing = kind != "gif" && s.opts.audio != "off" && audio.is_none();
+    // Audio opens in parallel with ffmpeg (both take a moment to start; done
+    // one after the other the waits added up). It's still running before
+    // the first video frame, and the mux aligns both by wall-clock time.
+    let audio_mode = if kind == "gif" { "off".to_string() } else { s.opts.audio.clone() };
+    let wav2 = wav.clone();
+    let audio_start = std::thread::spawn(move || match audio_mode.as_str() {
+        "system" => AudioRec::start(true, wav2),
+        "mic" => AudioRec::start(false, wav2),
+        _ => None,
+    });
 
     let mut child = None;
     let mut last_err = String::new();
@@ -355,6 +357,7 @@ fn run(app: AppHandle, s: Session) {
     // right for SDR content but clips HDR video at 80 nits); SDR → GPU path.
     let hdr = dxgi_output(s.mon.0, s.mon.1).map_or(false, |(_, h)| h);
     let methods: &[&str] = if hdr { &["ddagrab_hdr", "gdigrab", "ddagrab"] } else { &["ddagrab", "gdigrab"] };
+    let mut used_method = "";
     for method in methods {
         if CANCEL.load(Ordering::SeqCst) {
             break;
@@ -362,12 +365,14 @@ fn run(app: AppHandle, s: Session) {
         let _ = std::fs::remove_file(&vid);
         match spawn_ffmpeg(&s, &vid, method) {
             Ok(c) => match wait_started(c, stats.clone()) {
-                Ok(c) => { child = Some(c); break; }
+                Ok(c) => { child = Some(c); used_method = method; break; }
                 Err(e) => last_err = format!("{}: {}", method, e),
             },
             Err(e) => last_err = e,
         }
     }
+    let audio = audio_start.join().ok().flatten();
+    let audio_missing = kind != "gif" && s.opts.audio != "off" && audio.is_none();
     let Some(mut child) = child else {
         if let Some(a) = audio { a.stop(); }
         let _ = std::fs::remove_file(&wav);
@@ -378,6 +383,11 @@ fn run(app: AppHandle, s: Session) {
     };
 
     STATE.store(RECORDING, Ordering::SeqCst);
+    // HDR path: track the pointer ourselves (burned in after recording)
+    let cursor_track = (used_method == "ddagrab_hdr" && s.opts.cursor).then(|| {
+        let fps = if kind == "gif" { s.opts.fps.min(30) } else { s.opts.fps.clamp(10, 60) };
+        std::thread::spawn(move || track_cursor(fps))
+    });
     let _ = app.emit("rec-started", serde_json::json!({ "audioMissing": audio_missing }));
     let t0 = Instant::now();
     let mut died = false;
@@ -429,6 +439,7 @@ fn run(app: AppHandle, s: Session) {
         let _ = e.read_to_string(&mut err_txt);
     }
     let audio_res = audio.and_then(|a| a.stop());
+    let cursor_samples = cursor_track.and_then(|h| h.join().ok()).unwrap_or_default();
     // Recording is over: the bar goes right away; a GIF (takes a few
     // seconds) shows its progress in the result popup instead.
     hide_bar(&app);
@@ -463,6 +474,17 @@ fn run(app: AppHandle, s: Session) {
     while out.exists() {
         out = dir.join(format!("{} ({}).{}", stem, n, ext));
         n += 1;
+    }
+    // Pointer burned in (HDR path); on failure the video just has no cursor
+    if !cursor_samples.is_empty() {
+        let burned = dir.join(format!("~nibble-rec-{}-c.mkv", stamp));
+        let origin = (s.mon.0 + s.rel.0 as i32, s.mon.1 + s.rel.1 as i32);
+        if burn_cursor(&vid, &burned, &cursor_samples, origin, (s.rel.2, s.rel.3), s.scale, &dir, &stamp).is_ok() {
+            let _ = std::fs::remove_file(&vid);
+            let _ = std::fs::rename(&burned, &vid);
+        } else {
+            let _ = std::fs::remove_file(&burned);
+        }
     }
     let res = if kind == "gif" {
         make_gif(&vid, &out, s.opts.gif_fps.clamp(5, 50))
@@ -536,7 +558,7 @@ fn spawn_ffmpeg(s: &Session, out: &Path, method: &str) -> Result<std::process::C
     let mut a: Vec<String> = vec![
         "-hide_banner".into(), "-loglevel".into(), "error".into(),
         // progress on stdout: "frame=N" tells us the recording really runs
-        "-progress".into(), "pipe:1".into(), "-stats_period".into(), "0.2".into(),
+        "-progress".into(), "pipe:1".into(), "-stats_period".into(), "0.05".into(),
     ];
     let mut push = |v: &[&str]| a.extend(v.iter().map(|s| s.to_string()));
     // Explicit BGRA → BT.709 YUV. (Feeding NVENC the D3D11 frames directly is
@@ -557,7 +579,10 @@ fn spawn_ffmpeg(s: &Session, out: &Path, method: &str) -> Result<std::process::C
              hwdownload,format=rgbaf16le,setparams=color_trc=linear:color_primaries=bt709:colorspace=gbr:range=pc,\
              libplacebo=format=yuv420p:color_trc=iec61966-2-1:color_primaries=bt709:colorspace=bt709:range=tv:contrast={:.5},\
              settb=AVTB,setpts=RTCTIME",
-            idx, fps, cursor, w, h, x, y, 1.0 / white
+            // ddagrab draws the pointer into a float texture without its
+            // alpha (an arrow in a black square) → the cursor is burned in
+            // afterwards instead (burn_cursor)
+            idx, fps, 0, w, h, x, y, 1.0 / white
         );
         push(&["-f", "lavfi", "-i", &f]);
     } else if method == "ddagrab" {
@@ -637,6 +662,166 @@ fn wait_started(mut c: std::process::Child, stats: Arc<Stats>) -> Result<std::pr
     let _ = c.kill();
     let _ = c.wait();
     Err(if CANCEL.load(Ordering::SeqCst) { "cancelled".into() } else { "timed out".into() })
+}
+
+// ---------- Pointer for the HDR path (burned in after recording) ----------
+
+/// One pointer state: wall-clock time, screen position, cursor handle
+/// (0 = hidden).
+#[derive(Clone, Copy, PartialEq)]
+struct CursorSample { t: f64, x: i32, y: i32, shape: isize }
+
+/// Samples the pointer while recording (only changes are kept).
+#[cfg(windows)]
+fn track_cursor(fps: u32) -> Vec<CursorSample> {
+    use windows::Win32::UI::WindowsAndMessaging::{GetCursorInfo, CURSORINFO, CURSOR_SHOWING};
+    let step = Duration::from_micros(1_000_000 / fps.max(10) as u64);
+    let mut out: Vec<CursorSample> = Vec::new();
+    while STATE.load(Ordering::SeqCst) == RECORDING {
+        let mut ci = CURSORINFO { cbSize: std::mem::size_of::<CURSORINFO>() as u32, ..Default::default() };
+        if unsafe { GetCursorInfo(&mut ci) }.is_ok() {
+            let shown = ci.flags.0 & CURSOR_SHOWING.0 != 0;
+            let s = CursorSample { t: epoch_secs(), x: ci.ptScreenPos.x, y: ci.ptScreenPos.y, shape: if shown { ci.hCursor.0 as isize } else { 0 } };
+            if out.last().map_or(true, |l| (l.x, l.y, l.shape) != (s.x, s.y, s.shape)) {
+                out.push(s);
+            }
+        }
+        std::thread::sleep(step);
+    }
+    out
+}
+#[cfg(not(windows))]
+fn track_cursor(_: u32) -> Vec<CursorSample> { Vec::new() }
+
+/// Renders a cursor to straight-alpha RGBA (drawn on black and on white to
+/// recover alpha, which also handles old monochrome cursors). Returns
+/// (rgba, w, h, hotspot x, hotspot y).
+#[cfg(windows)]
+fn render_cursor(shape: isize) -> Option<(Vec<u8>, u32, u32, i32, i32)> {
+    use windows::Win32::Graphics::Gdi::*;
+    use windows::Win32::UI::WindowsAndMessaging::{DrawIconEx, GetIconInfo, DI_NORMAL, HICON, ICONINFO};
+    unsafe {
+        let icon = HICON(shape as _);
+        let mut ii = ICONINFO::default();
+        GetIconInfo(icon, &mut ii).ok()?;
+        let mut bm = BITMAP::default();
+        let src = if !ii.hbmColor.is_invalid() { ii.hbmColor } else { ii.hbmMask };
+        GetObjectW(src.into(), std::mem::size_of::<BITMAP>() as i32, Some(&mut bm as *mut _ as *mut _));
+        let (w, mut h) = (bm.bmWidth.max(1) as u32, bm.bmHeight.max(1) as u32);
+        if ii.hbmColor.is_invalid() { h /= 2; } // mask = AND + XOR stacked
+        let (hx, hy) = (ii.xHotspot as i32, ii.yHotspot as i32);
+        if !ii.hbmColor.is_invalid() { let _ = DeleteObject(ii.hbmColor.into()); }
+        if !ii.hbmMask.is_invalid() { let _ = DeleteObject(ii.hbmMask.into()); }
+
+        let screen = GetDC(None);
+        let dc = CreateCompatibleDC(Some(screen));
+        let bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: w as i32, biHeight: -(h as i32), biPlanes: 1, biBitCount: 32, biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut bits: *mut core::ffi::c_void = std::ptr::null_mut();
+        let dib = CreateDIBSection(Some(dc), &bmi, DIB_RGB_COLORS, &mut bits, None, 0).ok()?;
+        let old = SelectObject(dc, dib.into());
+        let n = (w * h * 4) as usize;
+        let draw = |bg: u8| -> Vec<u8> {
+            std::ptr::write_bytes(bits as *mut u8, bg, n);
+            let _ = DrawIconEx(dc, 0, 0, icon, w as i32, h as i32, 0, None, DI_NORMAL);
+            std::slice::from_raw_parts(bits as *const u8, n).to_vec()
+        };
+        let on_black = draw(0);
+        let on_white = draw(255);
+        SelectObject(dc, old);
+        let _ = DeleteObject(dib.into());
+        let _ = DeleteDC(dc);
+        ReleaseDC(None, screen);
+
+        let mut rgba = vec![0u8; n];
+        for i in (0..n).step_by(4) {
+            // per channel: black = a*c, white = a*c + (1-a)*255
+            let diff = (0..3).map(|c| on_white[i + c] as i32 - on_black[i + c] as i32).sum::<i32>() / 3;
+            let a = (255 - diff).clamp(0, 255);
+            if a == 0 { continue; }
+            for c in 0..3 {
+                let v = (on_black[i + c] as i32 * 255 / a).clamp(0, 255) as u8;
+                rgba[i + 2 - c] = v; // BGR → RGB
+            }
+            rgba[i + 3] = a as u8;
+        }
+        Some((rgba, w, h, hx, hy))
+    }
+}
+#[cfg(not(windows))]
+fn render_cursor(_: isize) -> Option<(Vec<u8>, u32, u32, i32, i32)> { None }
+
+/// Re-encodes `vid` with the recorded pointer on top: one overlay per
+/// cursor shape, moved frame-accurately by a sendcmd script (shapes not in
+/// use park off-frame). Timestamps are kept, so audio lines up as before.
+fn burn_cursor(vid: &Path, out: &Path, samples: &[CursorSample], origin: (i32, i32), size: (u32, u32), scale: f64, dir: &Path, stamp: &str) -> Result<(), String> {
+    let t0 = video_start(vid).ok_or("no video start")?;
+    // Up to 6 most used shapes
+    let mut counts: std::collections::HashMap<isize, usize> = std::collections::HashMap::new();
+    for s in samples.iter().filter(|s| s.shape != 0) { *counts.entry(s.shape).or_default() += 1; }
+    let mut shapes: Vec<isize> = counts.keys().copied().collect();
+    shapes.sort_by_key(|k| std::cmp::Reverse(counts[k]));
+    shapes.truncate(6);
+    let mut files = Vec::new();
+    let mut hot = Vec::new();
+    for (j, &sh) in shapes.iter().enumerate() {
+        let Some((rgba, w, h, hx, hy)) = render_cursor(sh) else { continue };
+        let p = dir.join(format!("~nibble-rec-{}-cur{}.png", stamp, j));
+        image::save_buffer(&p, &rgba, w, h, image::ExtendedColorType::Rgba8).map_err(|e| e.to_string())?;
+        files.push((p, sh));
+        hot.push(((hx as f64 * scale).round() as i32, (hy as f64 * scale).round() as i32));
+    }
+    if files.is_empty() {
+        return Err("no cursor shapes".into());
+    }
+    // sendcmd script: at each change, place the active shape, park the others
+    let park = -(size.0.max(size.1) as i32) - 4096;
+    let mut cmds = String::new();
+    for s in samples {
+        let t = (s.t - t0).max(0.0);
+        let parts: Vec<String> = files.iter().enumerate().map(|(j, (_, sh))| {
+            let (x, y) = if *sh == s.shape { (s.x - origin.0 - hot[j].0, s.y - origin.1 - hot[j].1) } else { (park, park) };
+            format!("overlay@c{} x {}, overlay@c{} y {}", j, x, j, y)
+        }).collect();
+        cmds.push_str(&format!("{:.3} {};\n", t, parts.join(", ")));
+    }
+    let cmd_name = format!("~nibble-rec-{}-cursor.txt", stamp);
+    let cmd_path = dir.join(&cmd_name);
+    std::fs::write(&cmd_path, cmds).map_err(|e| e.to_string())?;
+
+    let mut graph = format!("[0:v]setpts=PTS-STARTPTS,sendcmd=f={}[v0]", cmd_name);
+    for j in 0..files.len() {
+        graph.push_str(&format!(";[{}:v]scale=iw*{:.4}:ih*{:.4}:flags=lanczos,format=rgba[k{}];[v{}][k{}]overlay@c{}=x={}:y={}:eval=frame[v{}]", j + 1, scale, scale, j, j, j, j, park, park, j + 1));
+    }
+    graph.push_str(&format!(";[v{}]setpts=PTS+{:.6}/TB,format=yuv420p[out]", files.len(), t0));
+
+    let s = |v: &str| v.to_string();
+    let mut a = vec![s("-y"), s("-hide_banner"), s("-loglevel"), s("error"), s("-i"), vid.to_string_lossy().into_owned()];
+    for (p, _) in &files { a.extend([s("-i"), p.to_string_lossy().into_owned()]); }
+    a.extend([s("-filter_complex"), graph, s("-map"), s("[out]")]);
+    match crate::encoder_backend("h264") {
+        "nvenc" => a.extend(["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "18", "-b:v", "0"].map(s)),
+        "amf" => a.extend(["-c:v", "h264_amf", "-quality", "balanced", "-rc", "cqp", "-qp_i", "18", "-qp_p", "18"].map(s)),
+        "qsv" => a.extend(["-c:v", "h264_qsv", "-preset", "faster", "-global_quality", "18"].map(s)),
+        _ => a.extend(["-c:v", "libx264", "-preset", "veryfast", "-crf", "18"].map(s)),
+    }
+    a.extend(["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv", "-copyts", "-f", "matroska"].map(s));
+    a.push(out.to_string_lossy().into_owned());
+    let res = crate::cmd_tool("ffmpeg").current_dir(dir).args(&a).output().map_err(|e| format!("ffmpeg: {}", e));
+    let _ = std::fs::remove_file(&cmd_path);
+    for (p, _) in &files { let _ = std::fs::remove_file(p); }
+    let o = res?;
+    if o.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&o.stderr).lines().filter(|l| !l.trim().is_empty()).last().unwrap_or("ffmpeg failed").to_string())
+    }
 }
 
 /// First video timestamp (epoch seconds) — "start: 1760212345.678000".

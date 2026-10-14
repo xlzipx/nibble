@@ -258,12 +258,15 @@ const views = {
   picker:     document.getElementById('view-picker'),
   download:   document.getElementById('view-download'),
   settings:   document.getElementById('view-settings'),
+  captures:   document.getElementById('view-captures'),
   converting: document.getElementById('view-converting'),
 };
 function showView(name) {
   for (const k of Object.keys(views)) {
     views[k].classList.toggle('active', k === name);
   }
+  // measured after the entrance animation (its transforms shift the rects)
+  if (name === 'welcome') { requestAnimationFrame(alignActivityBottom); setTimeout(alignActivityBottom, 800); }
 }
 
 // ============================================================
@@ -1742,6 +1745,8 @@ function goBackOneLevel() {
   const v = activeViewName();
   if (v === 'settings') {
     leaveSettings();
+  } else if (v === 'captures') {
+    closeCaptures();
   } else if (v === 'picker' || v === 'download') {
     if (v === 'picker') {
       stagedFiles = [];
@@ -3099,14 +3104,169 @@ async function pushCaptureConfig(announce = false) {
     }
   }
 }
-document.getElementById('btn-go-shot').onclick = () => {
-  invoke('capture_start').catch((e) => showToast('Screenshot failed', String(e), 'fail'));
-};
+// Home: the Recent Activity panel ends where the System block's last line
+// ends (left column is centred, so this depends on the window height).
+function alignActivityBottom() {
+  if (activeViewName() !== 'welcome') return;
+  const right = document.querySelector('.welcome-right');
+  const user = document.getElementById('welcome-user');
+  const ref = user.textContent.trim() && getComputedStyle(user).display !== 'none' ? user : document.getElementById('welcome-hw');
+  const z = parseFloat(document.documentElement.style.zoom) || 1;
+  const rb = right.getBoundingClientRect().bottom - parseFloat(getComputedStyle(right).paddingBottom) * z;
+  const gap = Math.max(0, (rb - ref.getBoundingClientRect().bottom) / z);
+  right.style.setProperty('--ra-gap', gap.toFixed(1) + 'px');
+}
+window.addEventListener('resize', () => requestAnimationFrame(alignActivityBottom));
+// The System block fills in after hardware detection → measure again then
+{
+  const again = () => { requestAnimationFrame(alignActivityBottom); setTimeout(alignActivityBottom, 800); };
+  const mo = new MutationObserver(again);
+  for (const id of ['welcome-hw', 'welcome-user']) {
+    mo.observe(document.getElementById(id), { childList: true, characterData: true, subtree: true, attributes: true });
+  }
+}
+
+// ============================================================
+//  Captures — a browser for screenshots and recordings (like ShareX's
+//  history). Opened from the Screen capture tile; capturing itself runs
+//  through the shortcuts.
+// ============================================================
+let capFiles = [], capFilter = 'all';
+let capView = localStorage.getItem('nibble.capView') || 'medium';
+function applyCapView() {
+  if (!['large', 'medium', 'small', 'list'].includes(capView)) capView = 'medium';
+  document.getElementById('cap-grid').dataset.view = capView;
+  document.querySelectorAll('#cap-views button').forEach((b) => b.classList.toggle('active', b.dataset.v === capView));
+}
+function capRecDir() {
+  try { return JSON.parse(localStorage.getItem('nibble.rec') || '{}').dir || ''; } catch (e) { return ''; }
+}
+function fmtSize(b) {
+  return b >= 1048576 ? `${(b / 1048576).toFixed(b >= 10485760 ? 0 : 1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
+}
+async function loadCaptures() {
+  try {
+    capFiles = await invoke('list_captures', { shotDir: settings.shotDir || '', recDir: capRecDir() });
+  } catch (e) {
+    capFiles = [];
+    showToast('Could not read your captures', String(e), 'fail');
+  }
+  renderCaptures();
+}
+function renderCaptures() {
+  const grid = document.getElementById('cap-grid');
+  const isVid = (f) => f.kind !== 'image';
+  document.getElementById('cap-n-all').textContent = capFiles.length || '';
+  document.getElementById('cap-n-image').textContent = capFiles.filter((f) => !isVid(f)).length || '';
+  document.getElementById('cap-n-video').textContent = capFiles.filter(isVid).length || '';
+  const shown = capFiles.filter((f) => capFilter === 'all' || (capFilter === 'video' ? isVid(f) : !isVid(f)));
+  document.getElementById('cap-empty').classList.toggle('hidden', shown.length > 0);
+  grid.replaceChildren();
+  shown.forEach((f, i) => {
+    const card = document.createElement('div');
+    card.className = 'cap-card';
+    card.style.setProperty('--i', String(Math.min(i, 16)));
+    const media = document.createElement('div');
+    media.className = 'cap-media';
+    const src = convertFileSrc(f.path);
+    if (f.kind === 'video') {
+      const v = document.createElement('video');
+      v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'metadata';
+      v.src = src + '#t=0.3';
+      card.addEventListener('mouseenter', () => v.play().catch(() => {}));
+      card.addEventListener('mouseleave', () => { v.pause(); });
+      media.append(v);
+    } else {
+      const img = document.createElement('img');
+      img.loading = 'lazy'; img.decoding = 'async'; img.draggable = false; img.alt = '';
+      img.src = src;
+      media.append(img);
+    }
+    // Type badge: what it is at a glance (screenshot / video / GIF + extension)
+    const badge = document.createElement('span');
+    badge.className = 'cap-badge ' + f.kind;
+    badge.title = f.kind === 'video' ? 'Video recording' : f.kind === 'gif' ? 'GIF recording' : 'Screenshot';
+    const icon = f.kind === 'video' ? 'i-video' : f.kind === 'gif' ? 'i-gif' : 'i-camera';
+    badge.innerHTML = `<svg class="ic"><use href="#${icon}"/></svg><b></b>`;
+    badge.querySelector('b').textContent = (f.name.split('.').pop() || '').toUpperCase();
+    media.append(badge);
+    const acts = document.createElement('div');
+    acts.className = 'cap-acts';
+    const act = (icon, title, fn, cls = '') => {
+      const b = document.createElement('button');
+      b.className = 'cap-act ' + cls;
+      b.title = title;
+      b.setAttribute('aria-label', title);
+      b.innerHTML = `<svg class="ic"><use href="#${icon}"/></svg>`;
+      b.addEventListener('click', (e) => { e.stopPropagation(); fn(b); });
+      acts.append(b);
+    };
+    const gone = () => { showToast('File not found', 'It was moved or deleted.', 'fail'); loadCaptures(); };
+    act('i-external', 'Open', () => invoke('open_file', { path: f.path }).catch(gone));
+    act('i-folder', 'Show in folder', () => invoke('open_file', { path: f.path, reveal: true }).catch(gone));
+    act('i-clipboard', 'Copy to clipboard', async (b) => {
+      try {
+        await invoke('copy_to_clipboard', { path: f.path });
+        b.querySelector('use').setAttribute('href', '#i-check');
+        b.classList.add('done');
+        setTimeout(() => { b.classList.remove('done'); b.querySelector('use').setAttribute('href', '#i-clipboard'); }, 1400);
+      } catch (e) { if (String(e) === 'missing') gone(); else showToast('Could not copy', String(e), 'fail'); }
+    });
+    const permanent = settings.deleteMode === 'permanent';
+    act('i-trash', permanent ? 'Delete permanently' : 'Move to the Recycle Bin', async () => {
+      if (permanent && !confirm(`Delete "${f.name}" permanently?\nThis can't be undone.`)) return;
+      try {
+        await invoke('delete_file', { path: f.path, permanent });
+        card.classList.add('removing');
+        setTimeout(() => { capFiles = capFiles.filter((x) => x.path !== f.path); renderCaptures(); }, 220);
+      } catch (e) { showToast('Could not delete the file', String(e), 'fail'); }
+    }, 'danger');
+    media.append(acts);
+    const info = document.createElement('div');
+    info.className = 'cap-info';
+    const name = document.createElement('div');
+    name.className = 'cap-name';
+    name.textContent = f.name;
+    name.title = f.path;
+    const meta = document.createElement('div');
+    meta.className = 'cap-meta';
+    meta.textContent = [ago(new Date(f.mtime).toISOString()), fmtSize(f.size), f.clipboard ? 'clipboard' : ''].filter(Boolean).join(' · ');
+    info.append(name, meta);
+    card.append(media, info);
+    card.addEventListener('click', () => invoke('open_file', { path: f.path }).catch(gone));
+    grid.append(card);
+  });
+}
+function openCaptures() {
+  showView('captures');
+  loadCaptures();
+}
+function closeCaptures() {
+  document.querySelectorAll('#cap-grid video').forEach((v) => v.pause());
+  showView('welcome');
+  renderHistory();
+}
+document.getElementById('btn-go-shot').onclick = openCaptures;
+document.getElementById('btn-back-from-captures').onclick = closeCaptures;
+document.querySelectorAll('#cap-filter button').forEach((b) => (b.onclick = () => {
+  capFilter = b.dataset.f;
+  document.querySelectorAll('#cap-filter button').forEach((x) => x.classList.toggle('active', x === b));
+  renderCaptures();
+}));
+document.querySelectorAll('#cap-views button').forEach((b) => (b.onclick = () => {
+  capView = b.dataset.v;
+  try { localStorage.setItem('nibble.capView', capView); } catch (e) {}
+  applyCapView();
+}));
+applyCapView();
 // Any new history row (download, watcher, screenshot, conversion) → refresh
 let histTimer = 0;
 listen('history-changed', () => {
   clearTimeout(histTimer);
-  histTimer = setTimeout(renderHistory, 150);
+  histTimer = setTimeout(() => {
+    renderHistory();
+    if (activeViewName() === 'captures') loadCaptures();   // a new shot / recording appears right away
+  }, 150);
 });
 // Files deleted outside the app drop out of the list when you come back
 window.addEventListener('focus', () => renderHistory());
