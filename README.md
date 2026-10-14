@@ -2,6 +2,13 @@
   <img src="docs/screenshot.png" alt="Nibble" width="820" />
 </p>
 
+<p align="center">
+  <a href="https://github.com/xlzipx/nibble/releases/latest"><img src="https://img.shields.io/github/v/release/xlzipx/nibble?label=release&color=2cc5b0&style=flat-square" alt="release" /></a>
+  <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-4f8cf7?style=flat-square" alt="platform: Windows 10 | 11" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-d946ef?style=flat-square" alt="license: MIT" /></a>
+  <a href="https://tauri.app"><img src="https://img.shields.io/badge/built%20with-Tauri%20%2B%20Rust-ff4757?style=flat-square" alt="built with Tauri + Rust" /></a>
+</p>
+
 # Nibble
 
 **Capture, trim and share — only what you need.**
