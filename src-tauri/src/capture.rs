@@ -2,7 +2,8 @@
 //  Screenshots (ShareX-style region capture)
 //
 //  1. capture_start: grab the monitor under the cursor into memory (GDI
-//     BitBlt — a frozen frame, so menus/tooltips stay put while selecting).
+//     BitBlt — a frozen frame, so menus/tooltips stay put while selecting;
+//     on an HDR desktop a float frame instead, see crate::hdr).
 //  2. A borderless, topmost overlay window (capture.html) shows that frame
 //     dimmed; the user drags a rectangle (a plain click = whole screen).
 //  3. capture_finish: crop, then copy to the clipboard and/or save a PNG
@@ -28,6 +29,8 @@ struct Frame {
     windows: Vec<WinRect>,
     /// Monitor rect in physical px (for placing the result popup).
     mon: (i32, i32, u32, u32),
+    /// HDR monitor: 1 per pixel showing HDR content (tonemapped); empty on SDR
+    hdr_mask: Vec<u8>,
 }
 
 /// The last finished screenshot, for the result popup (shotpop.html).
@@ -538,7 +541,7 @@ pub fn start(app: &AppHandle, hide_main: bool, mode: &str) -> Result<(), String>
         }
         std::thread::sleep(std::time::Duration::from_millis(220)); // let DWM repaint without us
     }
-    let (x, y, w, h, bgra) = match grab_monitor_under_cursor() {
+    let (x, y, w, h, mut bgra) = match grab_monitor_under_cursor() {
         Ok(v) => v,
         Err(e) => {
             restore_main(app, hid);
@@ -546,7 +549,17 @@ pub fn start(app: &AppHandle, hide_main: bool, mode: &str) -> Result<(), String>
         }
     };
     let windows = visible_windows(x, y, w as i32, h as i32);
-    *FRAME.lock().unwrap() = Some(Frame { w, h, bgra, hid_main: hid, windows, mon: (x, y, w, h) });
+    // HDR desktop: GDI clips HDR content (games, HDR video) → washed out.
+    // Grab the float frame instead and convert per window (crate::hdr).
+    let mut hdr_mask = Vec::new();
+    let rects: Vec<(i32, i32, i32, i32)> = windows.iter().map(|r| (r.x, r.y, r.w, r.h)).collect();
+    if let Some(f) = crate::hdr::grab((x, y, w, h), &rects) {
+        if f.bgra.len() == bgra.len() {
+            bgra = f.bgra;
+            hdr_mask = f.mask;
+        }
+    }
+    *FRAME.lock().unwrap() = Some(Frame { w, h, bgra, hid_main: hid, windows, mon: (x, y, w, h), hdr_mask });
     if let Err(e) = open_overlay(app, x, y, w, h, mode) {
         *FRAME.lock().unwrap() = None;
         restore_main(app, hid);
@@ -557,8 +570,8 @@ pub fn start(app: &AppHandle, hide_main: bool, mode: &str) -> Result<(), String>
 
 /// Recording takes over from the overlay: the selected monitor + whether the
 /// main window was hidden. The frozen frame itself isn't needed any more.
-pub(crate) fn take_frame() -> Option<((i32, i32, u32, u32), bool, Vec<WinRect>)> {
-    FRAME.lock().unwrap().take().map(|f| (f.mon, f.hid_main, f.windows))
+pub(crate) fn take_frame() -> Option<((i32, i32, u32, u32), bool, Vec<WinRect>, Vec<u8>)> {
+    FRAME.lock().unwrap().take().map(|f| (f.mon, f.hid_main, f.windows, f.hdr_mask))
 }
 
 /// The page clears itself first (so a later show can't flash this frame),

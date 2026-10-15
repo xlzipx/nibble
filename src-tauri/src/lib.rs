@@ -93,6 +93,7 @@ fn cmd_tool(name: &str) -> Command {
 
 mod capture;
 mod record;
+mod hdr;
 mod presets;
 use presets::{all_presets, find_preset, Preset};
 

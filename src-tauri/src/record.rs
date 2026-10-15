@@ -93,6 +93,9 @@ struct Session {
     rel: (u32, u32, u32, u32),
     /// Bar rect in absolute physical px (for the click-through switch)
     bar_abs: (i32, i32, u32, u32),
+    /// HDR desktop + the region shows mostly HDR content (game, HDR video)
+    /// → tonemap it instead of dividing by SDR white (crate::hdr)
+    tonemap: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -116,7 +119,7 @@ pub fn record_start(app: AppHandle, x: Option<u32>, y: Option<u32>, w: Option<u3
     }
     // The overlay's monitor DPI, for sizing the bar
     let scale = app.get_webview_window("capture").and_then(|w| w.scale_factor().ok()).unwrap_or(1.0);
-    let Some((mon, hid_main, windows)) = crate::capture::take_frame() else {
+    let Some((mon, hid_main, windows, hdr_mask)) = crate::capture::take_frame() else {
         return Err("No capture in progress".into());
     };
     crate::capture::close_overlay(&app);
@@ -155,6 +158,7 @@ pub fn record_start(app: AppHandle, x: Option<u32>, y: Option<u32>, w: Option<u3
         bar_abs: (bx, by, bw as u32, bh as u32),
         app: crate::capture::app_at(&windows, rx, ry, rw, rh),
         scale,
+        tonemap: crate::hdr::hdr_share(&hdr_mask, mon.2, (rx, ry, rw, rh)) >= 0.5,
     };
     STOP.store(false, Ordering::SeqCst);
     CANCEL.store(false, Ordering::SeqCst);
@@ -549,6 +553,8 @@ fn default_dir() -> PathBuf {
 
 /// Frames carry wall-clock timestamps (setpts=RTCTIME, µs, kept by -copyts),
 /// so the audio can be lined up exactly afterwards.
+const TONEMAP_SHADER: &str = "nibble-hdr-tonemap.glsl";
+
 fn spawn_ffmpeg(s: &Session, out: &Path, method: &str) -> Result<std::process::Child, String> {
     let (x, y, w, h) = s.rel;
     let fps = if s.opts.format == "gif" { s.opts.fps.min(30) } else { s.opts.fps.clamp(10, 60) };
@@ -574,15 +580,22 @@ fn spawn_ffmpeg(s: &Session, out: &Path, method: &str) -> Result<std::process::C
         // exactly; HDR highlights above SDR white clip there instead of at 80.
         let idx = dxgi_output_index(s.mon.0, s.mon.1).unwrap_or(0);
         let white = sdr_white_scale(s.mon.0, s.mon.1).unwrap_or(1.0).clamp(1.0, 12.5);
+        // SDR content: scale SDR white to 1.0. HDR content (games, HDR
+        // video): 203-nit reference white + soft highlights, as a user shader
+        // (written to %TEMP%, ffmpeg runs there so the path needs no escaping)
+        let mut adjust = format!("contrast={:.5}", 1.0 / white);
+        if s.tonemap && std::fs::write(std::env::temp_dir().join(TONEMAP_SHADER), crate::hdr::tonemap_shader()).is_ok() {
+            adjust = format!("custom_shader_path={}", TONEMAP_SHADER);
+        }
         let f = format!(
             "ddagrab=output_idx={}:output_fmt=rgbaf16:force_fmt=1:framerate={}:draw_mouse={}:video_size={}x{}:offset_x={}:offset_y={},\
              hwdownload,format=rgbaf16le,setparams=color_trc=linear:color_primaries=bt709:colorspace=gbr:range=pc,\
-             libplacebo=format=yuv420p:color_trc=iec61966-2-1:color_primaries=bt709:colorspace=bt709:range=tv:contrast={:.5},\
+             libplacebo=format=yuv420p:color_trc=iec61966-2-1:color_primaries=bt709:colorspace=bt709:range=tv:{},\
              settb=AVTB,setpts=RTCTIME",
             // ddagrab draws the pointer into a float texture without its
             // alpha (an arrow in a black square) → the cursor is burned in
             // afterwards instead (burn_cursor)
-            idx, fps, 0, w, h, x, y, 1.0 / white
+            idx, fps, 0, w, h, x, y, adjust
         );
         push(&["-f", "lavfi", "-i", &f]);
     } else if method == "ddagrab" {
@@ -616,6 +629,7 @@ fn spawn_ffmpeg(s: &Session, out: &Path, method: &str) -> Result<std::process::C
     a.push(out.to_string_lossy().into_owned());
     crate::cmd_tool("ffmpeg")
         .args(&a)
+        .current_dir(std::env::temp_dir())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -900,7 +914,7 @@ fn dxgi_output_index(mx: i32, my: i32) -> Option<u32> {
 /// clips everything above SDR white → washed-out, over-bright video. GDI
 /// (BitBlt / gdigrab) gets the properly mapped SDR image, like screenshots.
 #[cfg(windows)]
-fn dxgi_output(mx: i32, my: i32) -> Option<(u32, bool)> {
+pub(crate) fn dxgi_output(mx: i32, my: i32) -> Option<(u32, bool)> {
     use windows::core::Interface;
     use windows::Win32::Graphics::Dxgi::Common::DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
     use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1, IDXGIOutput6};
@@ -927,7 +941,7 @@ fn dxgi_output(mx: i32, my: i32) -> Option<(u32, bool)> {
 /// a multiple of 80 nits (= 1.0 in the scRGB the desktop is composed in).
 /// 480-nit SDR white → 6.0. None when HDR is off / unknown.
 #[cfg(windows)]
-fn sdr_white_scale(mx: i32, my: i32) -> Option<f64> {
+pub(crate) fn sdr_white_scale(mx: i32, my: i32) -> Option<f64> {
     use windows::Win32::Devices::Display::{
         DisplayConfigGetDeviceInfo, GetDisplayConfigBufferSizes, QueryDisplayConfig,
         DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL, DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
@@ -985,7 +999,7 @@ fn sdr_white_scale(mx: i32, my: i32) -> Option<f64> {
     None
 }
 #[cfg(not(windows))]
-fn sdr_white_scale(_: i32, _: i32) -> Option<f64> {
+pub(crate) fn sdr_white_scale(_: i32, _: i32) -> Option<f64> {
     None
 }
 
@@ -994,7 +1008,7 @@ fn dxgi_output_index(_: i32, _: i32) -> Option<u32> {
     None
 }
 #[cfg(not(windows))]
-fn dxgi_output(_: i32, _: i32) -> Option<(u32, bool)> {
+pub(crate) fn dxgi_output(_: i32, _: i32) -> Option<(u32, bool)> {
     None
 }
 
